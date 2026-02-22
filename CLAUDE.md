@@ -6,7 +6,7 @@ NubbyGPT is a Discord bot that archives all server messages into a local SQLite 
 ## Tech Stack
 - **Runtime**: Node.js 22 + TypeScript (ES modules, `"type": "module"`)
 - **Discord**: discord.js v14 with privileged intents (MESSAGE_CONTENT, SERVER_MEMBERS)
-- **Database**: SQLite via better-sqlite3 (stored at `/config/nubbybot.db`)
+- **Database**: SQLite via better-sqlite3 (stored at `/config/db/nubbybot.db`)
 - **AI**: Anthropic Claude API (`@anthropic-ai/sdk`), using `claude-sonnet-4-5-20250929`
 - **Deployment**: Docker (multi-stage Alpine build) + docker-compose
 
@@ -42,8 +42,7 @@ src/
 ## Important Notes
 - Discord App ID: 1363093908526993509
 - The bot requires MESSAGE_CONTENT and SERVER_MEMBERS privileged intents enabled in the Discord Developer Portal
-- `.env` contains secrets (DISCORD_TOKEN, ANTHROPIC_API_KEY) - never commit this file
-- `.env.example` has placeholder values for reference
-- The `/config` directory is bind-mounted for persistent SQLite storage
+- Environment variables (DISCORD_TOKEN, ANTHROPIC_API_KEY) are set via Portainer UI or docker-compose environment section
+- The `/config` directory is bind-mounted to `/volume2/docker-ssd/nubbybot/config` for persistent SQLite storage
 - Backfill uses 1-second delays between batches to respect Discord rate limits
 - Profile building uses 2-second delays between users to respect Claude API rate limits
