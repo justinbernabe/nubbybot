@@ -90,4 +90,23 @@ export const profileRepository = {
       custom_traits: JSON.parse(row.custom_traits as string || '{}'),
     } as DbUserProfile;
   },
+
+  findUsersNeedingProfiles(guildId: string, staleHours: number): Array<{ user_id: string; message_count: number }> {
+    return getDb().prepare(`
+      SELECT m.author_id AS user_id, COUNT(*) AS message_count
+      FROM messages m
+      JOIN users u ON u.id = m.author_id
+      LEFT JOIN user_profiles p ON p.user_id = m.author_id AND p.guild_id = m.guild_id
+      WHERE m.guild_id = @guild_id
+        AND m.content != ''
+        AND u.bot = 0
+        AND (
+          p.id IS NULL
+          OR p.analyzed_at < datetime('now', '-' || @stale_hours || ' hours')
+        )
+      GROUP BY m.author_id
+      HAVING COUNT(*) >= 10
+      ORDER BY CASE WHEN p.id IS NULL THEN 0 ELSE 1 END ASC, message_count DESC
+    `).all({ guild_id: guildId, stale_hours: staleHours }) as Array<{ user_id: string; message_count: number }>;
+  },
 };

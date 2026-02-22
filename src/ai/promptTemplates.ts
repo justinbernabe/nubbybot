@@ -71,7 +71,16 @@ export function buildQueryUserPrompt(
   context: {
     recentConversation?: Array<{ author: string; content: string; date: string }>;
     relevantMessages: Array<{ author: string; content: string; date: string; channel: string }>;
-    userProfiles: Array<{ username: string; summary: string; traits: string[] }>;
+    userProfiles: Array<{
+      username: string;
+      summary: string;
+      traits: string[];
+      games?: string[];
+      topics?: string[];
+      communicationStyle?: string | null;
+      quotes?: string[];
+      allegiances?: Record<string, string>;
+    }>;
     referencedLinks?: Array<{ url: string; summary: string; author: string; date: string }>;
   },
 ): string {
@@ -90,7 +99,15 @@ export function buildQueryUserPrompt(
   if (context.userProfiles.length > 0) {
     prompt += `**Relevant User Profiles:**\n`;
     for (const profile of context.userProfiles) {
-      prompt += `- **${profile.username}**: ${profile.summary} | Traits: ${profile.traits.join(', ')}\n`;
+      let line = `- **${profile.username}**: ${profile.summary}`;
+      if (profile.traits.length > 0) line += ` | Traits: ${profile.traits.join(', ')}`;
+      if (profile.games && profile.games.length > 0) line += ` | Games: ${profile.games.join(', ')}`;
+      if (profile.topics && profile.topics.length > 0) line += ` | Topics: ${profile.topics.join(', ')}`;
+      if (profile.communicationStyle) line += ` | Style: ${profile.communicationStyle}`;
+      if (profile.quotes && profile.quotes.length > 0) line += ` | Quotes: "${profile.quotes.slice(0, 2).join('", "')}"`;
+      const allegiances = Object.entries(profile.allegiances ?? {});
+      if (allegiances.length > 0) line += ` | Allegiances: ${allegiances.map(([k, v]) => `${k}: ${v}`).join(', ')}`;
+      prompt += line + '\n';
     }
     prompt += '\n';
   }

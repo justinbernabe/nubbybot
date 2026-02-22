@@ -21,6 +21,11 @@ interface QueryContext {
     username: string;
     summary: string;
     traits: string[];
+    games: string[];
+    topics: string[];
+    communicationStyle: string | null;
+    quotes: string[];
+    allegiances: Record<string, string>;
   }>;
   referencedLinks: Array<{
     url: string;
@@ -66,6 +71,11 @@ export const contextBuilder = {
           username: (user.global_display_name ?? user.username) as string,
           summary: profile.summary ?? 'No summary available',
           traits: profile.personality_traits ?? [],
+          games: profile.favorite_games ?? [],
+          topics: profile.favorite_topics ?? [],
+          communicationStyle: profile.communication_style ?? null,
+          quotes: profile.notable_quotes ?? [],
+          allegiances: profile.allegiances ?? {},
         });
       }
 
@@ -121,13 +131,29 @@ export const contextBuilder = {
         const username = (user.username as string).toLowerCase();
         const displayName = (user.global_display_name as string | null)?.toLowerCase();
 
-        if (questionLower.includes(username) || (displayName && questionLower.includes(displayName))) {
+        // Check username, display name, and nicknames
+        let matched = questionLower.includes(username) || (displayName && questionLower.includes(displayName));
+        if (!matched) {
+          const nicknames = userRepository.getNicknames(user.id as string, guildId);
+          matched = nicknames.some((n) => {
+            const nick = (n.nickname as string | null)?.toLowerCase();
+            const display = (n.display_name as string | null)?.toLowerCase();
+            return (nick && questionLower.includes(nick)) || (display && questionLower.includes(display));
+          });
+        }
+
+        if (matched) {
           const profile = profileRepository.findByUserAndGuild(user.id as string, guildId);
           if (profile) {
             context.userProfiles.push({
               username: (user.global_display_name ?? user.username) as string,
               summary: profile.summary ?? 'No summary available',
               traits: profile.personality_traits ?? [],
+              games: profile.favorite_games ?? [],
+              topics: profile.favorite_topics ?? [],
+              communicationStyle: profile.communication_style ?? null,
+              quotes: profile.notable_quotes ?? [],
+              allegiances: profile.allegiances ?? {},
             });
           }
         }

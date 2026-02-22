@@ -8,7 +8,7 @@ import { logsPageHandler, logsApiHandler } from './handlers/logs.js';
 import { promptsPageHandler, promptsListApiHandler, promptUpdateApiHandler, promptDeleteApiHandler } from './handlers/prompts.js';
 import { settingsPageHandler, settingsApiHandler } from './handlers/settings.js';
 import { loginPageHandler, loginApiHandler } from './handlers/login.js';
-import { chatPageHandler, chatApiHandler, guildsApiHandler, linkScrapeApiHandler, linkScrapeStatusHandler } from './handlers/chat.js';
+import { chatPageHandler, chatApiHandler, guildsApiHandler, linkScrapeApiHandler, linkScrapeStatusHandler, profileBuildApiHandler, profileBuildStatusHandler } from './handlers/chat.js';
 
 let server: Server | null = null;
 
@@ -35,6 +35,8 @@ export function startAdminServer(): Server {
   router.post('/api/chat', chatApiHandler);
   router.post('/api/link-scrape', linkScrapeApiHandler);
   router.get('/api/link-scrape/status', linkScrapeStatusHandler);
+  router.post('/api/profile-build', profileBuildApiHandler);
+  router.get('/api/profile-build/status', profileBuildStatusHandler);
   router.post('/api/login', loginApiHandler);
 
   server = createServer(async (req, res) => {

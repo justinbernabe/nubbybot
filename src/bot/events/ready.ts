@@ -4,6 +4,7 @@ import { logger } from '../../utils/logger.js';
 import { guildRepository } from '../../database/repositories/guildRepository.js';
 import { channelRepository } from '../../database/repositories/channelRepository.js';
 import { backfillService } from '../../services/backfillService.js';
+import { autoProfileService } from '../../services/autoProfileService.js';
 
 export async function onReady(client: Client<true>): Promise<void> {
   logger.info(`Logged in as ${client.user.tag}! Serving ${client.guilds.cache.size} guild(s).`);
@@ -46,5 +47,17 @@ export async function onReady(client: Client<true>): Promise<void> {
     backfillService.catchUp(client, guildId).catch((err) => {
       logger.error(`Catch-up failed for guild ${guild.name}`, { error: err });
     });
+  }
+
+  // Auto-build profiles after catch-up has time to archive recent messages
+  for (const [guildId] of client.guilds.cache) {
+    setTimeout(() => {
+      autoProfileService.buildMissingAndStaleProfiles(guildId).then(() => {
+        autoProfileService.startPeriodicRefresh(guildId);
+      }).catch((err) => {
+        logger.error(`Auto-profile build failed for guild ${guildId}`, { error: err });
+        autoProfileService.startPeriodicRefresh(guildId);
+      });
+    }, 30_000);
   }
 }

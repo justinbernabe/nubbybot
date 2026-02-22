@@ -31,6 +31,16 @@ export function dashboardPage(): string {
         <button id="scrape-btn" onclick="startScrape()" style="min-height:44px">Scrape Links</button>
       </div>
     </div>
+    <div class="card" style="display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem">
+      <div>
+        <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.25rem">Profile Builder</div>
+        <div style="color:#808099;font-size:0.8rem">Build/refresh AI profiles for users with 10+ messages</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:center">
+        <span id="profile-status" style="color:#808099;font-size:0.8rem"></span>
+        <button id="profile-btn" onclick="startProfileBuild()" style="min-height:44px">Build Profiles</button>
+      </div>
+    </div>
     <div class="card" id="cost-card" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
         <div>
@@ -156,6 +166,58 @@ export function dashboardPage(): string {
           showToast('Failed to start scrape', true);
           btn.disabled = false;
           btn.textContent = 'Scrape Links';
+        }
+      }
+
+      async function checkProfileStatus() {
+        try {
+          const r = await fetch('/api/profile-build/status');
+          const d = await r.json();
+          const btn = document.getElementById('profile-btn');
+          const status = document.getElementById('profile-status');
+          if (d.running) {
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+            status.textContent = 'Building profiles — check logs';
+            status.style.color = '#ffb347';
+          } else {
+            btn.disabled = false;
+            btn.textContent = 'Build Profiles';
+            status.textContent = '';
+          }
+        } catch(e) { console.error(e); }
+      }
+      checkProfileStatus();
+      setInterval(checkProfileStatus, 5000);
+
+      async function startProfileBuild() {
+        const btn = document.getElementById('profile-btn');
+        try {
+          const gr = await fetch('/api/guilds');
+          const gd = await gr.json();
+          if (!gd.guilds || gd.guilds.length === 0) {
+            showToast('No guilds found', true);
+            return;
+          }
+          btn.disabled = true;
+          btn.textContent = 'Starting...';
+          const r = await fetch('/api/profile-build', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ guildId: gd.guilds[0].id }),
+          });
+          const d = await r.json();
+          if (r.ok) {
+            showToast(d.message || 'Profile build started');
+          } else {
+            showToast(d.error || 'Failed to start', true);
+            btn.disabled = false;
+            btn.textContent = 'Build Profiles';
+          }
+        } catch(e) {
+          showToast('Failed to start profile build', true);
+          btn.disabled = false;
+          btn.textContent = 'Build Profiles';
         }
       }
 

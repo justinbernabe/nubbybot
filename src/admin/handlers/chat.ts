@@ -8,6 +8,7 @@ import { getDb } from '../../database/client.js';
 import { sendJson, sendHtml, parseJsonBody } from '../middleware.js';
 import { chatPage } from '../templates/chat.js';
 import { linkAnalysisService } from '../../services/linkAnalysisService.js';
+import { autoProfileService } from '../../services/autoProfileService.js';
 import { logger } from '../../utils/logger.js';
 
 export function chatPageHandler(_req: IncomingMessage, res: ServerResponse): void {
@@ -180,4 +181,35 @@ export async function linkScrapeApiHandler(req: IncomingMessage, res: ServerResp
 
 export function linkScrapeStatusHandler(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, { running: linkAnalysisService.isScraping() });
+}
+
+export async function profileBuildApiHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const body = (await parseJsonBody(req)) as { guildId?: string };
+
+    if (!body.guildId || typeof body.guildId !== 'string') {
+      sendJson(res, { error: 'Missing "guildId"' }, 400);
+      return;
+    }
+
+    if (autoProfileService.isRunning()) {
+      sendJson(res, { error: 'Profile build already in progress' }, 409);
+      return;
+    }
+
+    autoProfileService.buildMissingAndStaleProfiles(body.guildId).then((stats) => {
+      logger.info('Profile build finished', stats);
+    }).catch((err) => {
+      logger.error('Profile build failed', { error: err });
+    });
+
+    sendJson(res, { ok: true, message: 'Profile build started. Check logs for progress.' });
+  } catch (err) {
+    logger.error('Profile build trigger error', { error: err });
+    sendJson(res, { error: 'Failed to start profile build' }, 500);
+  }
+}
+
+export function profileBuildStatusHandler(_req: IncomingMessage, res: ServerResponse): void {
+  sendJson(res, { running: autoProfileService.isRunning() });
 }
