@@ -4,7 +4,7 @@ import { registerEvents } from './bot/events/index.js';
 import { closeDb } from './database/client.js';
 import { logger } from './utils/logger.js';
 
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 
 async function main() {
   logger.info(`Starting NubbyGPT v${VERSION}`);
