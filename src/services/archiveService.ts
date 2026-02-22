@@ -1,12 +1,25 @@
 import type { Message } from 'discord.js';
 import { messageRepository } from '../database/repositories/messageRepository.js';
 import { userRepository } from '../database/repositories/userRepository.js';
+import { channelRepository } from '../database/repositories/channelRepository.js';
 
 export const archiveService = {
   archiveMessage(message: Message): void {
     if (!message.guild) return;
     // Skip other bots, but archive our own bot's messages
     if (message.author.bot && message.author.id !== message.client.user?.id) return;
+
+    // Ensure channel exists
+    channelRepository.upsert({
+      id: message.channel.id,
+      guild_id: message.guild.id,
+      name: 'name' in message.channel ? (message.channel.name ?? 'unknown') : 'unknown',
+      type: message.channel.type,
+      topic: 'topic' in message.channel ? (message.channel.topic ?? null) : null,
+      parent_id: 'parentId' in message.channel ? (message.channel.parentId ?? null) : null,
+      position: 'position' in message.channel ? message.channel.position : 0,
+      is_nsfw: 'nsfw' in message.channel ? message.channel.nsfw : false,
+    });
 
     // Ensure user exists
     userRepository.upsert({
