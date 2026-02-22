@@ -7,12 +7,12 @@ services:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - DISCORD_APP_ID=1363093908526993509
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - DB_PATH=/config/nubbybot.db
+      - DB_PATH=/db/nubbybot.db
       - LOG_LEVEL=info
       - BACKFILL_BATCH_DELAY_MS=1000
       - PROFILE_UPDATE_INTERVAL_HOURS=24
     volumes:
-      - ./config:/config
+      - ./db:/db
     logging:
       driver: json-file
       options:
