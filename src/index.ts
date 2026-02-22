@@ -5,7 +5,7 @@ import { closeDb } from './database/client.js';
 import { startAdminServer, stopAdminServer } from './admin/server.js';
 import { logger } from './utils/logger.js';
 
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 
 async function main() {
   logger.info(`Starting NubbyGPT v${VERSION}`);
