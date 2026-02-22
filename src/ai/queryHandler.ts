@@ -1,5 +1,5 @@
 import type { Message } from 'discord.js';
-import { anthropic } from './claude.js';
+import { createMessageWithRetry } from './claude.js';
 import { contextBuilder } from './contextBuilder.js';
 import { getPrompt } from './promptManager.js';
 import { buildQueryUserPrompt, buildSummarizePrompt } from './promptTemplates.js';
@@ -104,12 +104,12 @@ export const queryHandler = {
     logger.info(`Query context: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
     const userPrompt = buildQueryUserPrompt(question, context);
 
-    const response = await anthropic.messages.create({
+    const response = await createMessageWithRetry({
       model,
       max_tokens: 1500,
       system: getPrompt('QUERY_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: userPrompt }],
-    });
+    }, 'query');
 
     usageTracker.track('query', model, {
       input_tokens: response.usage.input_tokens,
@@ -133,12 +133,12 @@ export const queryHandler = {
     const userPrompt = buildQueryUserPrompt(question, context);
 
     const model = 'claude-sonnet-4-5-20250929';
-    const response = await anthropic.messages.create({
+    const response = await createMessageWithRetry({
       model,
       max_tokens: 1500,
       system: getPrompt('QUERY_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: userPrompt }],
-    });
+    }, 'query');
 
     usageTracker.track('query', model, {
       input_tokens: response.usage.input_tokens,
@@ -172,12 +172,12 @@ export const queryHandler = {
     const userPrompt = conversationContext + buildQueryUserPrompt(message.content, context);
 
     const model = 'claude-sonnet-4-5-20250929';
-    const response = await anthropic.messages.create({
+    const response = await createMessageWithRetry({
       model,
       max_tokens: 1500,
       system: getPrompt('QUERY_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: userPrompt }],
-    });
+    }, 'followup');
 
     usageTracker.track('followup_response', model, {
       input_tokens: response.usage.input_tokens,
@@ -223,12 +223,12 @@ export const queryHandler = {
     const prompt = buildSummarizePrompt(formatted, timeframe.label);
 
     const model = 'claude-sonnet-4-5-20250929';
-    const response = await anthropic.messages.create({
+    const response = await createMessageWithRetry({
       model,
       max_tokens: 500,
       system: getPrompt('SUMMARIZE_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: prompt }],
-    });
+    }, 'summarize');
 
     usageTracker.track('summarize', model, {
       input_tokens: response.usage.input_tokens,

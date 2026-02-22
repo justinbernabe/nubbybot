@@ -1,5 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { config } from '../config.js';
+import { createMessageWithRetry } from '../ai/claude.js';
 import { messageRepository } from '../database/repositories/messageRepository.js';
 import { profileRepository } from '../database/repositories/profileRepository.js';
 import { userRepository } from '../database/repositories/userRepository.js';
@@ -7,8 +6,6 @@ import { getPrompt } from '../ai/promptManager.js';
 import { usageTracker } from '../ai/usageTracker.js';
 import { logger } from '../utils/logger.js';
 import { delay } from '../utils/rateLimiter.js';
-
-const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
 
 export const profileService = {
   async buildProfile(userId: string, guildId: string): Promise<void> {
@@ -28,7 +25,7 @@ export const profileService = {
     const userName = (user?.global_display_name ?? user?.username ?? 'Unknown') as string;
 
     const model = 'claude-sonnet-4-5-20250929';
-    const response = await anthropic.messages.create({
+    const response = await createMessageWithRetry({
       model,
       max_tokens: 2048,
       system: getPrompt('PROFILE_ANALYSIS_SYSTEM_PROMPT'),
@@ -36,7 +33,7 @@ export const profileService = {
         role: 'user',
         content: `Analyze these ${messages.length} messages from Discord user "${userName}":\n\n${messageText}`,
       }],
-    });
+    }, 'profile');
 
     usageTracker.track('profile', model, {
       input_tokens: response.usage.input_tokens,

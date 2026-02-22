@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { anthropic } from '../../ai/claude.js';
+import { createMessageWithRetry } from '../../ai/claude.js';
 import { contextBuilder } from '../../ai/contextBuilder.js';
 import { getPrompt } from '../../ai/promptManager.js';
 import { buildQueryUserPrompt } from '../../ai/promptTemplates.js';
@@ -128,12 +128,12 @@ export async function chatApiHandler(req: IncomingMessage, res: ServerResponse):
     const fullPrompt = `${dbSnapshot}\n\n${queryPrompt}`;
 
     const model = 'claude-sonnet-4-5-20250929';
-    const response = await anthropic.messages.create({
+    const response = await createMessageWithRetry({
       model,
       max_tokens: 1500,
       system: getPrompt('QUERY_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: fullPrompt }],
-    });
+    }, 'admin_chat');
 
     usageTracker.track('admin_chat', model, {
       input_tokens: response.usage.input_tokens,

@@ -1,4 +1,4 @@
-import { anthropic } from './claude.js';
+import { createMessageWithRetry } from './claude.js';
 import { usageTracker } from './usageTracker.js';
 import { settingsRepository } from '../admin/settingsRepository.js';
 import { logger } from '../utils/logger.js';
@@ -166,11 +166,11 @@ export const followUpTracker = {
 
     try {
       const model = 'claude-haiku-4-5-20251001';
-      const response = await anthropic.messages.create({
+      const response = await createMessageWithRetry({
         model,
         max_tokens: 5,
         messages: [{ role: 'user', content: prompt }],
-      });
+      }, 'followup_check', 2, 5_000);
 
       usageTracker.track('followup_check', model, {
         input_tokens: response.usage.input_tokens,

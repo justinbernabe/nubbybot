@@ -1,5 +1,5 @@
 import type { Message } from 'discord.js';
-import { anthropic } from '../ai/claude.js';
+import { createMessageWithRetry } from '../ai/claude.js';
 import { getPrompt } from '../ai/promptManager.js';
 import { usageTracker } from '../ai/usageTracker.js';
 import { linkRepository } from '../database/repositories/linkRepository.js';
@@ -89,12 +89,12 @@ async function analyzeWithClaude(url: string, title: string | null, text: string
     : `URL: ${url}\n\nContent:\n${text}`;
 
   const model = 'claude-haiku-4-5-20251001';
-  const response = await anthropic.messages.create({
+  const response = await createMessageWithRetry({
     model,
     max_tokens: 200,
     system: getPrompt('LINK_ANALYSIS_SYSTEM_PROMPT'),
     messages: [{ role: 'user', content: userPrompt }],
-  });
+  }, 'link_analysis', 2, 5_000);
 
   usageTracker.track('link_analysis', model, {
     input_tokens: response.usage.input_tokens,
