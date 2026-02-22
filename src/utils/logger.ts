@@ -1,5 +1,8 @@
 import winston from 'winston';
 import { config } from '../config.js';
+import { MemoryTransport } from '../admin/memoryTransport.js';
+
+export const memoryTransport = new MemoryTransport({ level: 'debug' });
 
 export const logger = winston.createLogger({
   level: config.bot.logLevel,
@@ -18,5 +21,6 @@ export const logger = winston.createLogger({
         }),
       ),
     }),
+    memoryTransport,
   ],
 });

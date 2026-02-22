@@ -145,6 +145,12 @@ export function runMigrations(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_bot_queries_guild_created ON bot_queries(guild_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // FTS5 virtual table for full-text search on messages

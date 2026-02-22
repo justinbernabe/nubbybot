@@ -1,12 +1,8 @@
 import type { Message } from 'discord.js';
 import { anthropic } from './claude.js';
 import { contextBuilder } from './contextBuilder.js';
-import {
-  QUERY_SYSTEM_PROMPT,
-  SUMMARIZE_SYSTEM_PROMPT,
-  buildQueryUserPrompt,
-  buildSummarizePrompt,
-} from './promptTemplates.js';
+import { getPrompt } from './promptManager.js';
+import { buildQueryUserPrompt, buildSummarizePrompt } from './promptTemplates.js';
 import { messageRepository } from '../database/repositories/messageRepository.js';
 import { userRepository } from '../database/repositories/userRepository.js';
 import { channelRepository } from '../database/repositories/channelRepository.js';
@@ -116,7 +112,7 @@ export const queryHandler = {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 1500,
-      system: QUERY_SYSTEM_PROMPT,
+      system: getPrompt('QUERY_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: userPrompt }],
     });
 
@@ -157,7 +153,7 @@ export const queryHandler = {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 500,
-      system: SUMMARIZE_SYSTEM_PROMPT,
+      system: getPrompt('SUMMARIZE_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: prompt }],
     });
 

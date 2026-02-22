@@ -12,6 +12,10 @@ services:
       - LOG_LEVEL=debug
       - BACKFILL_BATCH_DELAY_MS=1000
       - PROFILE_UPDATE_INTERVAL_HOURS=24
+      - ADMIN_PORT=7774
+      - ADMIN_TOKEN
+    ports:
+      - "7774:7774"
     volumes:
       - /volume2/docker-ssd/nubbybot/config:/config:rw
     logging:

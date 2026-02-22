@@ -16,6 +16,10 @@ export const config = {
     backfillBatchDelayMs: parseInt(process.env.BACKFILL_BATCH_DELAY_MS ?? '1000', 10),
     profileUpdateIntervalHours: parseInt(process.env.PROFILE_UPDATE_INTERVAL_HOURS ?? '24', 10),
   },
+  admin: {
+    port: parseInt(process.env.ADMIN_PORT ?? '7774', 10),
+    token: process.env.ADMIN_TOKEN ?? '',
+  },
 } as const;
 
 const required = ['DISCORD_TOKEN', 'ANTHROPIC_API_KEY'];

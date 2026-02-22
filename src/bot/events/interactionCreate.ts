@@ -30,10 +30,12 @@ export async function onInteractionCreate(interaction: Interaction): Promise<voi
       if (parts.length === 0) {
         parts.push('No channels needed backfilling.');
       }
-      await interaction.editReply(parts.join('\n'));
+      await interaction.editReply(parts.join('\n')).catch(() => {
+        logger.warn('Backfill reply failed (interaction token likely expired)');
+      });
     } catch (err) {
       logger.error('Backfill failed', { error: err });
-      await interaction.editReply('Backfill encountered errors. Check the logs.');
+      await interaction.editReply('Backfill encountered errors. Check the logs.').catch(() => {});
     }
     return;
   }

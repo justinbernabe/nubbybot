@@ -24,6 +24,8 @@ COPY --from=builder /app/dist ./dist
 RUN mkdir -p /config && chown -R node:node /config
 VOLUME /config
 
+EXPOSE 7774
+
 USER node
 
 CMD ["node", "dist/index.js"]

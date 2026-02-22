@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { messageRepository } from '../database/repositories/messageRepository.js';
 import { profileRepository } from '../database/repositories/profileRepository.js';
 import { userRepository } from '../database/repositories/userRepository.js';
-import { PROFILE_ANALYSIS_SYSTEM_PROMPT } from '../ai/promptTemplates.js';
+import { getPrompt } from '../ai/promptManager.js';
 import { logger } from '../utils/logger.js';
 import { delay } from '../utils/rateLimiter.js';
 
@@ -29,7 +29,7 @@ export const profileService = {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 2048,
-      system: PROFILE_ANALYSIS_SYSTEM_PROMPT,
+      system: getPrompt('PROFILE_ANALYSIS_SYSTEM_PROMPT'),
       messages: [{
         role: 'user',
         content: `Analyze these ${messages.length} messages from Discord user "${userName}":\n\n${messageText}`,
