@@ -22,7 +22,7 @@ function snowflakeToTimestamp(id: string): number {
 }
 
 export const backfillService = {
-  async backfillGuild(client: Client<true>, guildId: string): Promise<BackfillStats> {
+  async backfillGuild(client: Client<true>, guildId: string, force = false): Promise<BackfillStats> {
     const stats: BackfillStats = { channelsProcessed: 0, channelsSkipped: 0, totalMessages: 0 };
     const guild = client.guilds.cache.get(guildId);
     if (!guild) {
@@ -30,7 +30,7 @@ export const backfillService = {
       return stats;
     }
 
-    logger.info(`Starting backfill for guild: ${guild.name} (${guildId})`);
+    logger.info(`Starting backfill for guild: ${guild.name} (${guildId})${force ? ' [FORCE REPROCESS]' : ''}`);
 
     const channels = await guild.channels.fetch();
 
@@ -41,7 +41,7 @@ export const backfillService = {
         channel.type === ChannelType.GuildAnnouncement
       ) {
         try {
-          const result = await this.backfillChannel(channel as TextBasedGuildChannel);
+          const result = await this.backfillChannel(channel as TextBasedGuildChannel, force);
           if (result.skipped) {
             stats.channelsSkipped++;
           } else {
@@ -61,11 +61,17 @@ export const backfillService = {
     return stats;
   },
 
-  async backfillChannel(channel: TextBasedGuildChannel): Promise<{ skipped: boolean; messagesArchived: number }> {
+  async backfillChannel(channel: TextBasedGuildChannel, force = false): Promise<{ skipped: boolean; messagesArchived: number }> {
     const channelRecord = channelRepository.findById(channel.id);
-    if (channelRecord?.backfill_complete) {
+    if (channelRecord?.backfill_complete && !force) {
       logger.info(`Channel #${channel.name} already backfilled, skipping.`);
       return { skipped: true, messagesArchived: 0 };
+    }
+
+    // Force reprocess: reset progress so we re-fetch from the newest message
+    if (force && channelRecord?.backfill_complete) {
+      channelRepository.update(channel.id, { backfill_complete: false });
+      logger.info(`Channel #${channel.name} reset for force reprocess.`);
     }
 
     logger.info(`Backfilling channel: #${channel.name} (${channel.id})`);

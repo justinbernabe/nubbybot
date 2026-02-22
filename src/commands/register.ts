@@ -5,6 +5,9 @@ const commands = [
   new SlashCommandBuilder()
     .setName('backfill')
     .setDescription('Archive all historical messages from server channels (admin only)')
+    .addBooleanOption(option =>
+      option.setName('force').setDescription('Force reprocess all channels, even already-backfilled ones').setRequired(false),
+    )
     .setDefaultMemberPermissions('0')
     .toJSON(),
 

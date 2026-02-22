@@ -15,11 +15,12 @@ export async function onInteractionCreate(interaction: Interaction): Promise<voi
       return;
     }
 
+    const force = interaction.options.getBoolean('force') ?? false;
     await interaction.deferReply();
-    logger.info(`Backfill triggered by ${interaction.user.username}`);
+    logger.info(`Backfill triggered by ${interaction.user.username}${force ? ' [FORCE]' : ''}`);
 
     try {
-      const stats = await backfillService.backfillGuild(interaction.client, interaction.guildId!);
+      const stats = await backfillService.backfillGuild(interaction.client, interaction.guildId!, force);
       const parts: string[] = [];
       if (stats.channelsProcessed > 0) {
         parts.push(`Backfilled **${stats.channelsProcessed}** channel(s) — **${stats.totalMessages.toLocaleString()}** messages archived.`);

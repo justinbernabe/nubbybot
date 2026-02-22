@@ -5,7 +5,7 @@ import { dashboardPage } from '../templates/dashboard.js';
 import { usageTracker } from '../../ai/usageTracker.js';
 import { followUpTracker } from '../../ai/followUpTracker.js';
 
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 
 const COST_LEVELS: Record<string, 'HIGH' | 'LOW'> = {
   query: 'HIGH',

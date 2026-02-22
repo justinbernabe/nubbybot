@@ -7,6 +7,37 @@ import { delay } from '../utils/rateLimiter.js';
 let running = false;
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
+// Profiles send ~500 messages per call (~15-20k input tokens).
+// Org rate limit may be as low as 10k tokens/min, so we need
+// aggressive backoff on 429s and generous gaps between calls.
+const DELAY_BETWEEN_BUILDS_MS = 15_000;
+const RATE_LIMIT_BASE_DELAY_MS = 60_000;
+const RATE_LIMIT_MAX_RETRIES = 5;
+
+function isRateLimitError(err: unknown): boolean {
+  if (err instanceof Error) {
+    return err.message.includes('429') || err.message.includes('rate_limit');
+  }
+  return false;
+}
+
+async function buildProfileWithRetry(userId: string, guildId: string): Promise<void> {
+  for (let attempt = 0; attempt <= RATE_LIMIT_MAX_RETRIES; attempt++) {
+    try {
+      await profileService.buildProfile(userId, guildId);
+      return;
+    } catch (err) {
+      if (isRateLimitError(err) && attempt < RATE_LIMIT_MAX_RETRIES) {
+        const waitMs = RATE_LIMIT_BASE_DELAY_MS * Math.pow(2, attempt);
+        logger.warn(`[Auto-Profile] Rate limited on ${userId} (attempt ${attempt + 1}/${RATE_LIMIT_MAX_RETRIES + 1}), waiting ${Math.round(waitMs / 1000)}s`);
+        await delay(waitMs);
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 export const autoProfileService = {
   isRunning(): boolean {
     return running;
@@ -36,7 +67,7 @@ export const autoProfileService = {
         const user = users[i];
 
         try {
-          await profileService.buildProfile(user.user_id, guildId);
+          await buildProfileWithRetry(user.user_id, guildId);
           stats.built++;
           logger.info(`[Auto-Profile] ${stats.built}/${users.length} — built profile for ${user.user_id} (${user.message_count} msgs)`);
         } catch (err) {
@@ -44,9 +75,8 @@ export const autoProfileService = {
           logger.error(`[Auto-Profile] Failed to build profile for ${user.user_id}`, { error: err });
         }
 
-        // Rate limit: 2s between Claude API calls
         if (i < users.length - 1) {
-          await delay(2000);
+          await delay(DELAY_BETWEEN_BUILDS_MS);
         }
       }
 
