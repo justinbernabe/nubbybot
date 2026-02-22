@@ -167,4 +167,11 @@ export const messageRepository = {
     const row = getDb().prepare('SELECT 1 FROM messages WHERE id = ?').get(id);
     return !!row;
   },
+
+  getLatestMessageId(channelId: string): string | null {
+    const row = getDb().prepare(
+      'SELECT id FROM messages WHERE channel_id = ? ORDER BY message_created_at DESC LIMIT 1',
+    ).get(channelId) as { id: string } | undefined;
+    return row?.id ?? null;
+  },
 };

@@ -19,8 +19,18 @@ export async function onInteractionCreate(interaction: Interaction): Promise<voi
     logger.info(`Backfill triggered by ${interaction.user.username}`);
 
     try {
-      await backfillService.backfillGuild(interaction.client, interaction.guildId!);
-      await interaction.editReply('Backfill complete! All accessible channel history has been archived.');
+      const stats = await backfillService.backfillGuild(interaction.client, interaction.guildId!);
+      const parts: string[] = [];
+      if (stats.channelsProcessed > 0) {
+        parts.push(`Backfilled **${stats.channelsProcessed}** channel(s) — **${stats.totalMessages.toLocaleString()}** messages archived.`);
+      }
+      if (stats.channelsSkipped > 0) {
+        parts.push(`${stats.channelsSkipped} channel(s) already complete, skipped.`);
+      }
+      if (parts.length === 0) {
+        parts.push('No channels needed backfilling.');
+      }
+      await interaction.editReply(parts.join('\n'));
     } catch (err) {
       logger.error('Backfill failed', { error: err });
       await interaction.editReply('Backfill encountered errors. Check the logs.');

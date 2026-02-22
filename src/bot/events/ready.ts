@@ -3,6 +3,7 @@ import { ChannelType } from 'discord.js';
 import { logger } from '../../utils/logger.js';
 import { guildRepository } from '../../database/repositories/guildRepository.js';
 import { channelRepository } from '../../database/repositories/channelRepository.js';
+import { backfillService } from '../../services/backfillService.js';
 
 export async function onReady(client: Client<true>): Promise<void> {
   logger.info(`Logged in as ${client.user.tag}! Serving ${client.guilds.cache.size} guild(s).`);
@@ -39,4 +40,11 @@ export async function onReady(client: Client<true>): Promise<void> {
   }
 
   logger.info('Guild and channel sync complete.');
+
+  // Catch up on messages missed while offline (runs in background)
+  for (const [guildId, guild] of client.guilds.cache) {
+    backfillService.catchUp(client, guildId).catch((err) => {
+      logger.error(`Catch-up failed for guild ${guild.name}`, { error: err });
+    });
+  }
 }
