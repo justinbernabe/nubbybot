@@ -3,6 +3,7 @@ services:
     build: .
     container_name: nubbybot
     restart: unless-stopped
+    user: "1028:65537"
     environment:
       - DISCORD_TOKEN
       - DISCORD_APP_ID=1363093908526993509
