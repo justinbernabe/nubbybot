@@ -51,6 +51,7 @@ export const backfillService = {
     let beforeId: string | undefined = channelRecord?.last_backfill_message_id as string | undefined;
     let totalArchived = 0;
     let batchNumber = 0;
+    let lastStatusLog = Date.now();
 
     while (true) {
       batchNumber++;
@@ -87,9 +88,15 @@ export const backfillService = {
       // Save progress so we can resume if interrupted
       channelRepository.update(channel.id, { last_backfill_message_id: beforeId });
 
-      logger.debug(
-        `#${channel.name} batch ${batchNumber}: archived ${messages.size} messages (total: ${totalArchived})`,
-      );
+      // Log progress every 15 seconds
+      const now = Date.now();
+      if (now - lastStatusLog >= 15000) {
+        const oldestDate = oldestMessage.createdAt.toISOString().split('T')[0];
+        logger.info(
+          `[Backfill] #${channel.name}: ${totalArchived} messages archived (batch ${batchNumber}, reached ${oldestDate})`,
+        );
+        lastStatusLog = now;
+      }
 
       await delay(config.bot.backfillBatchDelayMs);
     }
