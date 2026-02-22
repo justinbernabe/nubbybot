@@ -7,6 +7,8 @@ import { messageRepository } from '../database/repositories/messageRepository.js
 import { userRepository } from '../database/repositories/userRepository.js';
 import { channelRepository } from '../database/repositories/channelRepository.js';
 import { queryLogRepository } from '../database/repositories/queryLogRepository.js';
+import { usageTracker } from './usageTracker.js';
+import { followUpTracker } from './followUpTracker.js';
 import { logger } from '../utils/logger.js';
 
 const SUMMARIZE_PATTERNS = [
@@ -74,7 +76,7 @@ export const queryHandler = {
 
     const question = message.content.replace(/<@!?\d+>/g, '').trim();
     if (!question) {
-      await message.reply("You mentioned me but didn't ask anything! Try asking a question or say `summarize today`.");
+      await message.reply("I'm here. What do you need?");
       return;
     }
 
@@ -97,28 +99,98 @@ export const queryHandler = {
       .filter(u => u.id !== message.client.user!.id)
       .map(u => u.id);
 
-    const answer = await this.answerQuestion(question, message.guild.id, message.channel.id, mentionedUserIds);
-    await this.sendReply(message, answer);
-    this.logQuery(message, question, answer, startTime);
-  },
-
-  async answerQuestion(question: string, guildId: string, channelId: string, mentionedUserIds: string[]): Promise<string> {
-    const context = contextBuilder.buildContext(guildId, question, mentionedUserIds);
-
+    const model = 'claude-sonnet-4-5-20250929';
+    const context = contextBuilder.buildContext(message.guild.id, question, mentionedUserIds, message.channel.id);
     logger.info(`Query context: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
-
     const userPrompt = buildQueryUserPrompt(question, context);
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model,
       max_tokens: 1500,
       system: getPrompt('QUERY_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: userPrompt }],
     });
 
+    usageTracker.track('query', model, {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    });
+
+    const answer = response.content[0].type === 'text'
+      ? response.content[0].text
+      : 'I could not generate a response.';
+
+    await this.sendReply(message, answer);
+    followUpTracker.registerWindow(message.channel.id, message.author.id, question, answer);
+    this.logQuery(message, question, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
+  },
+
+  async answerQuestion(question: string, guildId: string, channelId: string, mentionedUserIds: string[]): Promise<string> {
+    const context = contextBuilder.buildContext(guildId, question, mentionedUserIds, channelId);
+
+    logger.info(`Query context: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
+
+    const userPrompt = buildQueryUserPrompt(question, context);
+
+    const model = 'claude-sonnet-4-5-20250929';
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: 1500,
+      system: getPrompt('QUERY_SYSTEM_PROMPT'),
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+
+    usageTracker.track('query', model, {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    });
+
     return response.content[0].type === 'text'
       ? response.content[0].text
       : 'I could not generate a response.';
+  },
+
+  async handleFollowUp(message: Message, conversationHistory: Array<{ role: 'user' | 'bot'; content: string }>): Promise<void> {
+    if (!message.guild) return;
+
+    if ('sendTyping' in message.channel) {
+      await message.channel.sendTyping();
+    }
+
+    const startTime = Date.now();
+
+    const context = contextBuilder.buildContext(message.guild.id, message.content, [], message.channel.id);
+
+    // Prepend conversation history to the prompt
+    let conversationContext = '**Prior conversation with this user:**\n';
+    for (const entry of conversationHistory) {
+      const label = entry.role === 'user' ? 'User' : 'NubbyGPT';
+      conversationContext += `${label}: ${entry.content}\n`;
+    }
+    conversationContext += '\n';
+
+    const userPrompt = conversationContext + buildQueryUserPrompt(message.content, context);
+
+    const model = 'claude-sonnet-4-5-20250929';
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: 1500,
+      system: getPrompt('QUERY_SYSTEM_PROMPT'),
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+
+    usageTracker.track('followup_response', model, {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    });
+
+    const answer = response.content[0].type === 'text'
+      ? response.content[0].text
+      : 'I could not generate a response.';
+
+    await this.sendReply(message, answer);
+    followUpTracker.recordFollowUpResponse(message.channel.id, message.author.id, answer);
+    this.logQuery(message, `[follow-up] ${message.content}`, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
   },
 
   async handleSummarize(question: string, guildId: string, channelId: string): Promise<string> {
@@ -150,11 +222,17 @@ export const queryHandler = {
 
     const prompt = buildSummarizePrompt(formatted, timeframe.label);
 
+    const model = 'claude-sonnet-4-5-20250929';
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model,
       max_tokens: 500,
       system: getPrompt('SUMMARIZE_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: prompt }],
+    });
+
+    usageTracker.track('summarize', model, {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
     });
 
     const summary = response.content[0].type === 'text'
@@ -176,7 +254,7 @@ export const queryHandler = {
     }
   },
 
-  logQuery(message: Message, question: string, answer: string, startTime: number): void {
+  logQuery(message: Message, question: string, answer: string, startTime: number, inputTokens?: number, outputTokens?: number): void {
     try {
       queryLogRepository.insert({
         guild_id: message.guild!.id,
@@ -184,6 +262,8 @@ export const queryHandler = {
         asking_user_id: message.author.id,
         question,
         answer,
+        context_tokens_used: inputTokens ?? null,
+        response_tokens_used: outputTokens ?? null,
         model_used: 'claude-sonnet-4-5-20250929',
         response_time_ms: Date.now() - startTime,
       });

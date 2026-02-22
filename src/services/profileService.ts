@@ -4,6 +4,7 @@ import { messageRepository } from '../database/repositories/messageRepository.js
 import { profileRepository } from '../database/repositories/profileRepository.js';
 import { userRepository } from '../database/repositories/userRepository.js';
 import { getPrompt } from '../ai/promptManager.js';
+import { usageTracker } from '../ai/usageTracker.js';
 import { logger } from '../utils/logger.js';
 import { delay } from '../utils/rateLimiter.js';
 
@@ -26,14 +27,20 @@ export const profileService = {
     const user = userRepository.findById(userId);
     const userName = (user?.global_display_name ?? user?.username ?? 'Unknown') as string;
 
+    const model = 'claude-sonnet-4-5-20250929';
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model,
       max_tokens: 2048,
       system: getPrompt('PROFILE_ANALYSIS_SYSTEM_PROMPT'),
       messages: [{
         role: 'user',
         content: `Analyze these ${messages.length} messages from Discord user "${userName}":\n\n${messageText}`,
       }],
+    });
+
+    usageTracker.track('profile', model, {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
     });
 
     const responseText = response.content[0].type === 'text' ? response.content[0].text : '';

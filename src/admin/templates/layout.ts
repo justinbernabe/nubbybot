@@ -49,9 +49,30 @@ export function layout(title: string, content: string, activePage: string): stri
     .settings-row:last-child { border-bottom: none; }
     .settings-key { font-family: monospace; color: #7c8aff; font-size: 0.85rem; }
     .settings-val { color: #c0c0d0; font-size: 0.85rem; }
-    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #1a2a1a; color: #6bcc6b; border: 1px solid #2a4a2a; padding: 0.6rem 1.2rem; border-radius: 6px; font-size: 0.85rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #1a2a1a; color: #6bcc6b; border: 1px solid #2a4a2a; padding: 0.6rem 1.2rem; border-radius: 6px; font-size: 0.85rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; }
     .toast.error { background: #2a1a1a; color: #e05555; border-color: #4a2a2a; }
     .toast.show { opacity: 1; }
+
+    @media (max-width: 640px) {
+      nav { padding: 0.5rem 0.75rem; gap: 0; flex-wrap: wrap; }
+      nav .brand { width: 100%; margin-bottom: 0.4rem; margin-right: 0; }
+      nav a { padding: 0.4rem 0.6rem; font-size: 0.8rem; }
+      main { padding: 0 0.75rem; margin: 1rem auto; }
+      h1 { font-size: 1.1rem; }
+      .grid { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+      .stat .value { font-size: 1.4rem; }
+      .card { padding: 0.75rem; }
+      .settings-row { flex-direction: column; align-items: flex-start; gap: 0.2rem; }
+      .settings-val { word-break: break-all; }
+      .filter-bar { flex-wrap: wrap; }
+      .log-container { max-height: 450px; font-size: 11px; }
+      .log-entry { padding: 0.3rem 0.25rem; }
+      textarea { min-height: 180px; font-size: 12px; }
+      .btn-row { flex-wrap: wrap; }
+      button { padding: 0.5rem 1rem; min-height: 44px; }
+      .prompt-section h2 { flex-wrap: wrap; font-size: 0.9rem; }
+      .toast { left: 0.75rem; right: 0.75rem; bottom: 0.75rem; text-align: center; }
+    }
   </style>
 </head>
 <body>

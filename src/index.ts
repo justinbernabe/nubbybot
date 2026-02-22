@@ -5,16 +5,21 @@ import { closeDb } from './database/client.js';
 import { startAdminServer, stopAdminServer } from './admin/server.js';
 import { logger } from './utils/logger.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 async function main() {
   logger.info(`Starting NubbyGPT v${VERSION}`);
 
+  startAdminServer();
+
   const client = createDiscordClient();
   registerEvents(client);
-  await client.login(config.discord.token);
 
-  startAdminServer();
+  try {
+    await client.login(config.discord.token);
+  } catch (err) {
+    logger.error('Discord login failed — admin panel still running', { error: err });
+  }
 
   const shutdown = () => {
     logger.info('Shutting down...');

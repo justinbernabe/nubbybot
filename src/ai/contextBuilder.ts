@@ -6,6 +6,11 @@ import { linkRepository } from '../database/repositories/linkRepository.js';
 import { logger } from '../utils/logger.js';
 
 interface QueryContext {
+  recentConversation: Array<{
+    author: string;
+    content: string;
+    date: string;
+  }>;
   relevantMessages: Array<{
     author: string;
     content: string;
@@ -26,12 +31,30 @@ interface QueryContext {
 }
 
 export const contextBuilder = {
-  buildContext(guildId: string, question: string, mentionedUserIds: string[]): QueryContext {
+  buildContext(guildId: string, question: string, mentionedUserIds: string[], channelId?: string): QueryContext {
     const context: QueryContext = {
+      recentConversation: [],
       relevantMessages: [],
       userProfiles: [],
       referencedLinks: [],
     };
+
+    // 0. Fetch recent conversation from the current channel for context awareness
+    if (channelId) {
+      try {
+        const recentMessages = messageRepository.getRecentByChannel(channelId, 20);
+        // Reverse so oldest first (query returns DESC)
+        for (const msg of recentMessages.reverse()) {
+          context.recentConversation.push({
+            author: ((msg.global_display_name ?? msg.username) as string) ?? 'Unknown',
+            content: msg.content as string,
+            date: new Date(msg.message_created_at as string).toLocaleTimeString(),
+          });
+        }
+      } catch (err) {
+        logger.warn('Failed to fetch recent channel messages', { error: err });
+      }
+    }
 
     // 1. Get profiles and recent messages for mentioned users
     for (const userId of mentionedUserIds) {

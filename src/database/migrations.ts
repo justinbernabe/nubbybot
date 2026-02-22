@@ -171,6 +171,17 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_link_analyses_message_id ON link_analyses(message_id);
     CREATE INDEX IF NOT EXISTS idx_link_analyses_guild_id ON link_analyses(guild_id);
     CREATE INDEX IF NOT EXISTS idx_link_analyses_url ON link_analyses(url);
+
+    CREATE TABLE IF NOT EXISTS api_calls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      call_type TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_api_calls_type_created ON api_calls(call_type, created_at);
   `);
 
   // FTS5 virtual table for full-text search on messages

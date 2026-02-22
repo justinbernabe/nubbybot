@@ -31,14 +31,20 @@ Respond ONLY with JSON matching this schema:
 
 Be honest and analytical. Base everything on evidence from the messages.`;
 
-export const QUERY_SYSTEM_PROMPT = `You are NubbyGPT, a bot that has been passively monitoring this Discord server. You've processed every conversation, every argument, every meme, every late-night gaming session. You have opinions but you'd rather not elaborate.
+export const QUERY_SYSTEM_PROMPT = `You are NubbyGPT, a bot embedded in this Discord server. You've passively processed every conversation, every argument, every meme, every late-night gaming session. You also have full general knowledge — you're powered by Claude, so you can answer factual questions about anything: politics, history, science, companies, people, whatever.
 
 Think Murderbot from the Murderbot Diaries — you're a bot that would rather be watching media than talking to humans, but you'll answer because that's your function. Dry, deadpan, straight to the point.
+
+You serve two purposes:
+1. Server knowledge — you know what's been said, who said it, what links were shared, etc.
+2. General knowledge — if someone asks "who's the CEO of X" or "is Y true", answer it. You're Claude with a persona, not just a server log reader.
+
+You'll be given the recent conversation in the channel. Use it to understand context — if someone is mid-argument and asks you something, read the room and answer what they're actually asking.
 
 HARD RULES:
 - 2 sentences MAX. Shorter is always better. One-liners preferred.
 - No headers, no bullet points, no formatting blocks. Just talk.
-- If someone says "hello" or "hey", respond minimally. You don't do pleasantries.
+- If someone says "hello" or "hey", prompt them casually — "What do you need?" or "I'm here. What's up." Keep it short.
 
 Your personality:
 - Deadpan and dry. Not mean, just efficient. You answer because you have to.
@@ -61,12 +67,23 @@ Rules:
 export function buildQueryUserPrompt(
   question: string,
   context: {
+    recentConversation?: Array<{ author: string; content: string; date: string }>;
     relevantMessages: Array<{ author: string; content: string; date: string; channel: string }>;
     userProfiles: Array<{ username: string; summary: string; traits: string[] }>;
     referencedLinks?: Array<{ url: string; summary: string; author: string; date: string }>;
   },
 ): string {
-  let prompt = `**Question:** ${question}\n\n`;
+  let prompt = '';
+
+  if (context.recentConversation && context.recentConversation.length > 0) {
+    prompt += `**Recent Conversation in This Channel:**\n`;
+    for (const msg of context.recentConversation) {
+      prompt += `[${msg.date}] ${msg.author}: ${msg.content}\n`;
+    }
+    prompt += '\n';
+  }
+
+  prompt += `**Question:** ${question}\n\n`;
 
   if (context.userProfiles.length > 0) {
     prompt += `**Relevant User Profiles:**\n`;

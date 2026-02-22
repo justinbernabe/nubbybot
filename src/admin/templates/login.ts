@@ -8,12 +8,12 @@ export function loginPage(): string {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0f0f1a; color: #e0e0e0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .login-box { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px; padding: 2rem; width: 320px; }
+    .login-box { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px; padding: 2rem; width: 320px; max-width: calc(100vw - 2rem); }
     .login-box h1 { font-size: 1.2rem; margin-bottom: 0.5rem; color: #7c8aff; }
     .login-box p { font-size: 0.85rem; color: #808099; margin-bottom: 1.25rem; }
-    input { width: 100%; background: #12121f; color: #e0e0e0; border: 1px solid #2a2a4a; border-radius: 6px; padding: 0.6rem 0.75rem; font-size: 0.9rem; margin-bottom: 1rem; }
+    input { width: 100%; background: #12121f; color: #e0e0e0; border: 1px solid #2a2a4a; border-radius: 6px; padding: 0.6rem 0.75rem; font-size: 16px; margin-bottom: 1rem; min-height: 44px; }
     input:focus { outline: none; border-color: #7c8aff; }
-    button { width: 100%; background: #7c8aff; color: #0f0f1a; border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+    button { width: 100%; background: #7c8aff; color: #0f0f1a; border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; min-height: 44px; }
     button:hover { background: #9aa4ff; }
     .error { color: #e05555; font-size: 0.85rem; margin-bottom: 0.75rem; display: none; }
   </style>

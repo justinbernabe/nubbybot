@@ -1,6 +1,6 @@
 # NubbyGPT
 
-Discord bot that archives server messages, builds AI user profiles, analyzes shared links, and answers questions about server history with a deadpan Murderbot-inspired persona.
+Discord bot that brings Claude AI into a server. Archives messages, builds user profiles, analyzes shared links, and answers any question — both about server history and general knowledge (facts, trivia, debates, etc.). Every server member can @mention the bot to use Claude's full capabilities within the context of their conversations. Deadpan Murderbot-inspired persona.
 
 ## Tech Stack
 
@@ -23,7 +23,7 @@ src/
     promptTemplates.ts              — Hardcoded default prompts (query, summarize, profile, link)
     promptManager.ts                — Runtime prompt overrides (checks settings DB, falls back to defaults)
     queryHandler.ts                 — Handles @mentions and /ask, routes to answer or summarize
-    contextBuilder.ts               — Builds context for queries (FTS search, profiles, link analyses)
+    contextBuilder.ts               — Builds context for queries (recent channel convo, FTS search, profiles, link analyses)
   bot/
     client.ts                       — Discord.js client factory with intents
     events/
@@ -81,12 +81,12 @@ src/
 
 1. **Message Archiving** — Every message archived to SQLite with FTS5 full-text search index
 2. **Smart Backfill** — `/backfill` fetches all historical messages with progress %, skips already-complete channels, auto catch-up on startup for missed messages
-3. **AI Queries** — @mention or `/ask` queries server history via Claude Sonnet (2 sentence max, Murderbot persona)
+3. **AI Queries** — @mention or `/ask` to ask anything — server history, general knowledge, fact-checking, trivia. Bot reads recent channel conversation for context awareness. Powered by Claude Sonnet (2 sentence max, Murderbot persona)
 4. **Summarize** — @mention with "summarize today/this week/last 3 hours" for conversation recaps
 5. **User Profiles** — `/profile @user` generates AI personality analysis from message history
-6. **Link Analysis** — Silently fetches and summarizes URLs posted in chat via Claude Haiku, stored for future context
-7. **Admin Panel** (port 7774) — Dashboard stats, live logs, runtime prompt editor, settings viewer, chat testing interface
-8. **Runtime Prompt Editing** — Edit all system prompts from admin panel, changes apply immediately without redeploying
+6. **Link Analysis** — Silently fetches and summarizes URLs posted in chat via Claude Haiku, stored for future context. Retroactive scrape available from dashboard (last year of messages).
+7. **Admin Panel** (port 7774) — Mobile-responsive. Dashboard stats, live logs, runtime prompt editor, settings viewer, chat testing interface with database access.
+8. **Runtime Prompt Editing** — Edit all system prompts from admin panel, changes persist in SQLite across restarts, apply immediately without redeploying
 
 ## Architecture Decisions
 
@@ -135,6 +135,8 @@ Runs on Synology NAS via Portainer (Repository stack mode, branch: `refs/heads/m
 ## Bot Persona
 
 Murderbot-inspired: deadpan, dry, efficient. Answers because it has to, not because it wants to. 2 sentences max. No pleasantries, no filler, no enthusiasm. References server inside jokes when relevant. Prompts are editable at runtime via admin panel `/prompts`.
+
+The bot is not just a server log reader — it's Claude with full general knowledge. If someone asks "who's the CEO of Tesla" or "is this true?", it answers factually. It reads recent channel messages to understand conversational context (e.g., mid-argument fact checks). When greeted, it responds casually ("What do you need?" / "I'm here. What's up.") instead of a canned help message.
 
 ## Conventions
 

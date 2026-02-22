@@ -120,6 +120,18 @@ export const messageRepository = {
     `).all({ user_id: userId, guild_id: guildId, limit }) as UserMessageResult[];
   },
 
+  getRecentByChannel(channelId: string, limit = 20) {
+    return getDb().prepare(`
+      SELECT m.id, m.author_id, m.content, m.message_created_at, u.username, u.global_display_name
+      FROM messages m
+      JOIN users u ON u.id = m.author_id
+      WHERE m.channel_id = @channel_id
+        AND m.content != ''
+      ORDER BY m.message_created_at DESC
+      LIMIT @limit
+    `).all({ channel_id: channelId, limit }) as Array<Record<string, unknown>>;
+  },
+
   getByChannelSince(channelId: string, since: string, limit = 500) {
     return getDb().prepare(`
       SELECT m.id, m.author_id, m.content, m.message_created_at, u.username, u.global_display_name
