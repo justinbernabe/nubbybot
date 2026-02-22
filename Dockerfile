@@ -21,7 +21,7 @@ RUN npm ci --omit=dev && apk del python3 make g++
 
 COPY --from=builder /app/dist ./dist
 
-RUN mkdir -p /config/db && chown -R node:node /config
+RUN mkdir -p /config && chown -R node:node /config
 VOLUME /config
 
 USER node

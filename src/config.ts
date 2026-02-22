@@ -9,7 +9,7 @@ export const config = {
     apiKey: process.env.ANTHROPIC_API_KEY!,
   },
   db: {
-    path: process.env.DB_PATH ?? '/config/db/nubbybot.db',
+    path: process.env.DB_PATH ?? '/config/nubbybot.db',
   },
   bot: {
     logLevel: process.env.LOG_LEVEL ?? 'info',

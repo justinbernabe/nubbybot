@@ -34,7 +34,7 @@ A Discord bot that archives all server messages, builds AI-powered user profiles
    - `ANTHROPIC_API_KEY` = your Anthropic API key
 4. Deploy
 
-**Data persistence**: The SQLite database is stored at `/config/db/nubbybot.db`. The `/config` volume is mounted to your Synology at `/volume2/docker-ssd/nubbybot/config`.
+**Data persistence**: The SQLite database is stored at `/config/nubbybot.db`. The `/config` volume is mounted to your Synology at `/volume2/docker-ssd/nubbybot/config`.
 
 ## Usage
 
@@ -59,7 +59,7 @@ A Discord bot that archives all server messages, builds AI-powered user profiles
 | `DISCORD_TOKEN` | Yes | Bot token from Discord Developer Portal |
 | `DISCORD_APP_ID` | No | Defaults to `1363093908526993509` |
 | `ANTHROPIC_API_KEY` | Yes | API key from Anthropic Console |
-| `DB_PATH` | No | SQLite path (defaults to `/config/db/nubbybot.db`) |
+| `DB_PATH` | No | SQLite path (defaults to `/config/nubbybot.db`) |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
 | `BACKFILL_BATCH_DELAY_MS` | No | Delay between backfill batches (default: `1000`) |
 | `PROFILE_UPDATE_INTERVAL_HOURS` | No | Hours between profile rebuilds (default: `24`) |
