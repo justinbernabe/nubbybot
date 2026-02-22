@@ -1,11 +1,15 @@
+import { createRequire } from 'module';
 import { config } from './config.js';
 import { createDiscordClient } from './bot/client.js';
 import { registerEvents } from './bot/events/index.js';
 import { closeDb } from './database/client.js';
 import { logger } from './utils/logger.js';
 
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json');
+
 async function main() {
-  logger.info('Starting NubbyGPT...');
+  logger.info(`Starting NubbyGPT v${version}`);
 
   const client = createDiscordClient();
   registerEvents(client);
