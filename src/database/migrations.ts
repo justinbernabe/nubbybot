@@ -151,6 +151,26 @@ export function runMigrations(db: Database.Database): void {
       value TEXT NOT NULL,
       updated_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS link_analyses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      url TEXT NOT NULL,
+      domain TEXT,
+      title TEXT,
+      summary TEXT,
+      status TEXT DEFAULT 'pending',
+      error_reason TEXT,
+      analyzed_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_link_analyses_message_id ON link_analyses(message_id);
+    CREATE INDEX IF NOT EXISTS idx_link_analyses_guild_id ON link_analyses(guild_id);
+    CREATE INDEX IF NOT EXISTS idx_link_analyses_url ON link_analyses(url);
   `);
 
   // FTS5 virtual table for full-text search on messages

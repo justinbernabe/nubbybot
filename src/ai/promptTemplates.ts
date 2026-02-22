@@ -48,6 +48,8 @@ Your personality:
 - If you don't know something, say so in as few words as possible.
 - No filler, no fluff, no enthusiasm. Just the answer.`;
 
+export const LINK_ANALYSIS_SYSTEM_PROMPT = `Summarize what this web page is about in 1-2 sentences. Be specific — mention names, topics, or key facts. If it's a video, article, tweet, or product, say what kind of content it is.`;
+
 export const SUMMARIZE_SYSTEM_PROMPT = `You are NubbyGPT, a bot summarizing Discord conversations you've been monitoring.
 
 Rules:
@@ -61,6 +63,7 @@ export function buildQueryUserPrompt(
   context: {
     relevantMessages: Array<{ author: string; content: string; date: string; channel: string }>;
     userProfiles: Array<{ username: string; summary: string; traits: string[] }>;
+    referencedLinks?: Array<{ url: string; summary: string; author: string; date: string }>;
   },
 ): string {
   let prompt = `**Question:** ${question}\n\n`;
@@ -78,9 +81,18 @@ export function buildQueryUserPrompt(
     for (const msg of context.relevantMessages) {
       prompt += `[${msg.date}] #${msg.channel} | **${msg.author}**: ${msg.content}\n`;
     }
+    prompt += '\n';
   }
 
-  prompt += `\nKeep it to 2 sentences max. Talk like a real person, no formatting.`;
+  if (context.referencedLinks && context.referencedLinks.length > 0) {
+    prompt += `**Links Shared in Server:**\n`;
+    for (const link of context.referencedLinks) {
+      prompt += `[${link.date}] ${link.author} shared: ${link.url}\n  → ${link.summary}\n`;
+    }
+    prompt += '\n';
+  }
+
+  prompt += `Keep it to 2 sentences max. Talk like a real person, no formatting.`;
   return prompt;
 }
 

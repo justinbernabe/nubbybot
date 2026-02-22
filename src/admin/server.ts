@@ -8,6 +8,7 @@ import { logsPageHandler, logsApiHandler } from './handlers/logs.js';
 import { promptsPageHandler, promptsListApiHandler, promptUpdateApiHandler, promptDeleteApiHandler } from './handlers/prompts.js';
 import { settingsPageHandler, settingsApiHandler } from './handlers/settings.js';
 import { loginPageHandler, loginApiHandler } from './handlers/login.js';
+import { chatPageHandler, chatApiHandler, guildsApiHandler } from './handlers/chat.js';
 
 let server: Server | null = null;
 
@@ -19,6 +20,7 @@ export function startAdminServer(): Server {
   router.get('/logs', logsPageHandler);
   router.get('/prompts', promptsPageHandler);
   router.get('/settings', settingsPageHandler);
+  router.get('/chat', chatPageHandler);
   router.get('/login', loginPageHandler);
 
   // API
@@ -28,6 +30,8 @@ export function startAdminServer(): Server {
   router.put('/api/prompts/:key', promptUpdateApiHandler);
   router.delete('/api/prompts/:key', promptDeleteApiHandler);
   router.get('/api/settings', settingsApiHandler);
+  router.get('/api/guilds', guildsApiHandler);
+  router.post('/api/chat', chatApiHandler);
   router.post('/api/login', loginApiHandler);
 
   server = createServer(async (req, res) => {

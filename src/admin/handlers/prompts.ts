@@ -7,6 +7,7 @@ const VALID_KEYS = new Set([
   'QUERY_SYSTEM_PROMPT',
   'SUMMARIZE_SYSTEM_PROMPT',
   'PROFILE_ANALYSIS_SYSTEM_PROMPT',
+  'LINK_ANALYSIS_SYSTEM_PROMPT',
 ]);
 
 export function promptsPageHandler(_req: IncomingMessage, res: ServerResponse): void {
@@ -34,7 +35,7 @@ export async function promptUpdateApiHandler(
       sendJson(res, { error: 'Missing "value" in body' }, 400);
       return;
     }
-    setPromptOverride(key as 'QUERY_SYSTEM_PROMPT' | 'SUMMARIZE_SYSTEM_PROMPT' | 'PROFILE_ANALYSIS_SYSTEM_PROMPT', body.value);
+    setPromptOverride(key as 'QUERY_SYSTEM_PROMPT' | 'SUMMARIZE_SYSTEM_PROMPT' | 'PROFILE_ANALYSIS_SYSTEM_PROMPT' | 'LINK_ANALYSIS_SYSTEM_PROMPT', body.value);
     sendJson(res, { ok: true });
   } catch {
     sendJson(res, { error: 'Invalid request body' }, 400);
@@ -51,6 +52,6 @@ export async function promptDeleteApiHandler(
     sendJson(res, { error: 'Invalid prompt key' }, 400);
     return;
   }
-  clearPromptOverride(key as 'QUERY_SYSTEM_PROMPT' | 'SUMMARIZE_SYSTEM_PROMPT' | 'PROFILE_ANALYSIS_SYSTEM_PROMPT');
+  clearPromptOverride(key as 'QUERY_SYSTEM_PROMPT' | 'SUMMARIZE_SYSTEM_PROMPT' | 'PROFILE_ANALYSIS_SYSTEM_PROMPT' | 'LINK_ANALYSIS_SYSTEM_PROMPT');
   sendJson(res, { ok: true });
 }

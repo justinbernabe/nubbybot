@@ -61,6 +61,7 @@ export function layout(title: string, content: string, activePage: string): stri
     <a href="/logs" class="${activePage === 'logs' ? 'active' : ''}">Logs</a>
     <a href="/prompts" class="${activePage === 'prompts' ? 'active' : ''}">Prompts</a>
     <a href="/settings" class="${activePage === 'settings' ? 'active' : ''}">Settings</a>
+    <a href="/chat" class="${activePage === 'chat' ? 'active' : ''}">Chat</a>
   </nav>
   <main>${content}</main>
   <div id="toast" class="toast"></div>

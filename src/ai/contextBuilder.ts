@@ -2,6 +2,7 @@ import { messageRepository } from '../database/repositories/messageRepository.js
 import { profileRepository } from '../database/repositories/profileRepository.js';
 import { userRepository } from '../database/repositories/userRepository.js';
 import { channelRepository } from '../database/repositories/channelRepository.js';
+import { linkRepository } from '../database/repositories/linkRepository.js';
 import { logger } from '../utils/logger.js';
 
 interface QueryContext {
@@ -16,6 +17,12 @@ interface QueryContext {
     summary: string;
     traits: string[];
   }>;
+  referencedLinks: Array<{
+    url: string;
+    summary: string;
+    author: string;
+    date: string;
+  }>;
 }
 
 export const contextBuilder = {
@@ -23,6 +30,7 @@ export const contextBuilder = {
     const context: QueryContext = {
       relevantMessages: [],
       userProfiles: [],
+      referencedLinks: [],
     };
 
     // 1. Get profiles and recent messages for mentioned users
@@ -118,6 +126,29 @@ export const contextBuilder = {
       totalChars += msg.content.length + msg.author.length + 50;
       return totalChars < 80_000;
     });
+
+    // 5. Search for relevant link analyses
+    try {
+      const links = linkRepository.searchByGuild(guildId, question, 10);
+      const authorCache = new Map<string, string>();
+
+      for (const link of links) {
+        if (!link.summary) continue;
+        if (!authorCache.has(link.author_id)) {
+          const user = userRepository.findById(link.author_id);
+          authorCache.set(link.author_id, ((user?.global_display_name ?? user?.username) as string) ?? link.author_id);
+        }
+
+        context.referencedLinks.push({
+          url: link.url,
+          summary: link.summary,
+          author: authorCache.get(link.author_id)!,
+          date: new Date(link.created_at).toLocaleDateString(),
+        });
+      }
+    } catch (err) {
+      logger.warn('Link search failed', { error: err });
+    }
 
     return context;
   },

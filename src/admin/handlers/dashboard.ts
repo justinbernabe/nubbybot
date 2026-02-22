@@ -3,7 +3,7 @@ import { getDb } from '../../database/client.js';
 import { sendJson, sendHtml } from '../middleware.js';
 import { dashboardPage } from '../templates/dashboard.js';
 
-const VERSION = '1.3.0';
+const VERSION = '0.1.0';
 
 export function dashboardPageHandler(_req: IncomingMessage, res: ServerResponse): void {
   sendHtml(res, dashboardPage());
