@@ -25,7 +25,6 @@ interface QueryContext {
     topics: string[];
     communicationStyle: string | null;
     quotes: string[];
-    allegiances: Record<string, string>;
   }>;
   referencedLinks: Array<{
     url: string;
@@ -75,7 +74,6 @@ export const contextBuilder = {
           topics: profile.favorite_topics ?? [],
           communicationStyle: profile.communication_style ?? null,
           quotes: profile.notable_quotes ?? [],
-          allegiances: profile.allegiances ?? {},
         });
       }
 
@@ -153,7 +151,6 @@ export const contextBuilder = {
               topics: profile.favorite_topics ?? [],
               communicationStyle: profile.communication_style ?? null,
               quotes: profile.notable_quotes ?? [],
-              allegiances: profile.allegiances ?? {},
             });
           }
         }

@@ -5,6 +5,7 @@ import {
   LINK_ANALYSIS_SYSTEM_PROMPT,
 } from './promptTemplates.js';
 import { settingsRepository } from '../admin/settingsRepository.js';
+import { trainingManager } from './trainingManager.js';
 
 const PROMPT_KEYS = {
   QUERY_SYSTEM_PROMPT: 'prompt:QUERY_SYSTEM_PROMPT',
@@ -23,7 +24,11 @@ const DEFAULTS: Record<string, string> = {
 type PromptName = keyof typeof PROMPT_KEYS;
 
 export function getPrompt(name: PromptName): string {
-  return settingsRepository.get(PROMPT_KEYS[name]) ?? DEFAULTS[name];
+  const base = settingsRepository.get(PROMPT_KEYS[name]) ?? DEFAULTS[name];
+  if (name === 'QUERY_SYSTEM_PROMPT') {
+    return base + trainingManager.buildInstructionsBlock();
+  }
+  return base;
 }
 
 export function getPromptInfo(name: PromptName) {

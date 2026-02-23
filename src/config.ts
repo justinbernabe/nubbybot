@@ -15,6 +15,14 @@ export const config = {
     logLevel: process.env.LOG_LEVEL ?? 'info',
     backfillBatchDelayMs: parseInt(process.env.BACKFILL_BATCH_DELAY_MS ?? '1000', 10),
     profileUpdateIntervalHours: parseInt(process.env.PROFILE_UPDATE_INTERVAL_HOURS ?? '24', 10),
+    allowedChannelIds: process.env.ALLOWED_CHANNEL_IDS
+      ? process.env.ALLOWED_CHANNEL_IDS.split(',').map(s => s.trim())
+      : [] as string[],
+    primaryGuildId: process.env.PRIMARY_GUILD_ID ?? '',
+    ownerUserId: process.env.OWNER_USER_ID ?? '',
+    allowedDmUserIds: process.env.ALLOWED_DM_USER_IDS
+      ? process.env.ALLOWED_DM_USER_IDS.split(',').map(s => s.trim())
+      : [] as string[],
   },
   admin: {
     port: parseInt(process.env.ADMIN_PORT ?? '7774', 10),

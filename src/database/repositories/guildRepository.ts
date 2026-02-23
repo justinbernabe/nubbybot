@@ -30,6 +30,10 @@ export const guildRepository = {
     return getDb().prepare('SELECT * FROM guilds WHERE id = ?').get(id) as Record<string, unknown> | undefined;
   },
 
+  findFirst() {
+    return getDb().prepare('SELECT * FROM guilds ORDER BY rowid LIMIT 1').get() as Record<string, unknown> | undefined;
+  },
+
   updateBackfillTimestamp(id: string): void {
     getDb().prepare(`UPDATE guilds SET last_backfill_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(id);
   },

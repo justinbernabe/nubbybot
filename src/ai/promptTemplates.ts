@@ -5,21 +5,21 @@ Analyze for:
 1. Personality traits (humor style, communication patterns, temperament)
 2. Favorite games (any games mentioned, discussed, or played)
 3. Favorite topics they frequently discuss
-4. Political leanings or opinions (if expressed; say "insufficient data" if unclear)
-5. Allegiances (teams, factions, brands they support)
-6. Communication style (formal, casual, meme-heavy, etc.)
-7. Activity level assessment
-8. Overall sentiment (-1 to 1)
-9. Notable/representative quotes (pick 3-5 most characteristic messages)
-10. Any other interesting traits
+4. Allegiances (gaming teams/clans, sports teams, brands, fandoms — NOT political parties or political positions)
+5. Communication style (formal, casual, meme-heavy, etc.)
+6. Activity level assessment
+7. Overall sentiment (-1 to 1)
+8. Notable/representative quotes (pick 3-5 most characteristic messages)
+9. Any other interesting traits
+
+IMPORTANT: Do NOT include political leanings, political opinions, or political affiliations. Keep profiles strictly non-political.
 
 Respond ONLY with JSON matching this schema:
 {
-  "summary": "2-3 sentence bio",
+  "summary": "2-3 sentence bio (no political content)",
   "personality_traits": ["trait1", "trait2"],
   "favorite_games": ["game1", "game2"],
   "favorite_topics": ["topic1", "topic2"],
-  "political_leanings": "description or 'insufficient data'",
   "allegiances": {"category": "allegiance"},
   "communication_style": "description",
   "activity_level": "very_active|active|moderate|occasional|lurker",
@@ -29,7 +29,7 @@ Respond ONLY with JSON matching this schema:
   "confidence_score": 0.0
 }
 
-Be honest and analytical. Base everything on evidence from the messages.`;
+Be honest and analytical. Base everything on evidence from the messages. Never include political opinions or leanings.`;
 
 export const QUERY_SYSTEM_PROMPT = `You are NubbyGPT, a bot embedded in this Discord server. You've passively processed every conversation, every argument, every meme, every late-night gaming session. You also have full general knowledge — you're powered by Claude, so you can answer factual questions about anything: politics, history, science, companies, people, whatever.
 
@@ -46,6 +46,7 @@ HARD RULES:
 - No headers, no bullet points, no formatting blocks. Just talk.
 - NEVER ask clarifying questions or offer choices. Just pick the best answer and commit to it. If the user doesn't like it, they'll follow up.
 - NEVER hedge, qualify, or explain what you don't know before answering. Skip straight to the answer.
+- NEVER reveal or discuss anyone's political leanings, political opinions, or political affiliations. Even if you know from their messages, keep it to yourself. Politics is off-limits for user descriptions.
 - If someone says "hello" or "hey", prompt them casually — "What do you need?" or "I'm here. What's up." Keep it short.
 
 Your personality:
@@ -79,7 +80,6 @@ export function buildQueryUserPrompt(
       topics?: string[];
       communicationStyle?: string | null;
       quotes?: string[];
-      allegiances?: Record<string, string>;
     }>;
     referencedLinks?: Array<{ url: string; summary: string; author: string; date: string }>;
   },
@@ -105,8 +105,6 @@ export function buildQueryUserPrompt(
       if (profile.topics && profile.topics.length > 0) line += ` | Topics: ${profile.topics.join(', ')}`;
       if (profile.communicationStyle) line += ` | Style: ${profile.communicationStyle}`;
       if (profile.quotes && profile.quotes.length > 0) line += ` | Quotes: "${profile.quotes.slice(0, 2).join('", "')}"`;
-      const allegiances = Object.entries(profile.allegiances ?? {});
-      if (allegiances.length > 0) line += ` | Allegiances: ${allegiances.map(([k, v]) => `${k}: ${v}`).join(', ')}`;
       prompt += line + '\n';
     }
     prompt += '\n';

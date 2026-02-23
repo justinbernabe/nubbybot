@@ -7,8 +7,11 @@ import { messageRepository } from '../database/repositories/messageRepository.js
 import { userRepository } from '../database/repositories/userRepository.js';
 import { channelRepository } from '../database/repositories/channelRepository.js';
 import { queryLogRepository } from '../database/repositories/queryLogRepository.js';
+import { guildRepository } from '../database/repositories/guildRepository.js';
 import { usageTracker } from './usageTracker.js';
 import { followUpTracker } from './followUpTracker.js';
+import { trainingManager } from './trainingManager.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 const SUMMARIZE_PATTERNS = [
@@ -240,6 +243,125 @@ export const queryHandler = {
       : 'Could not generate summary.';
 
     return `**TL;DR for ${timeframe.label}** (${messages.length} messages):\n${summary}`;
+  },
+
+  getPrimaryGuildId(): string | null {
+    if (config.bot.primaryGuildId) return config.bot.primaryGuildId;
+    const guild = guildRepository.findFirst();
+    return guild ? (guild.id as string) : null;
+  },
+
+  async handleDm(message: Message, guildId: string): Promise<void> {
+    const question = message.content.trim();
+    if (!question) {
+      await message.reply("I'm here. What do you need?");
+      return;
+    }
+
+    // Check for training commands (owner only)
+    if (message.author.id === config.bot.ownerUserId) {
+      const trainingResult = trainingManager.handleCommand(question, 'dm');
+      if (trainingResult) {
+        await message.reply(trainingResult);
+        return;
+      }
+    }
+
+    if ('sendTyping' in message.channel) {
+      await message.channel.sendTyping();
+    }
+
+    const startTime = Date.now();
+
+    // Summarize requests default to server-wide in DMs
+    if (isSummarizeRequest(question)) {
+      const answer = await this.handleSummarize(question, guildId, '');
+      await this.sendReply(message, answer);
+      this.logDmQuery(message, guildId, question, answer, startTime);
+      return;
+    }
+
+    const model = 'claude-sonnet-4-5-20250929';
+    const context = contextBuilder.buildContext(guildId, question, []);
+    logger.info(`DM query context: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
+    const userPrompt = buildQueryUserPrompt(question, context);
+
+    const response = await createMessageWithRetry({
+      model,
+      max_tokens: 1500,
+      system: getPrompt('QUERY_SYSTEM_PROMPT'),
+      messages: [{ role: 'user', content: userPrompt }],
+    }, 'dm_query');
+
+    usageTracker.track('dm_query', model, {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    });
+
+    const answer = response.content[0].type === 'text'
+      ? response.content[0].text
+      : 'I could not generate a response.';
+
+    await this.sendReply(message, answer);
+    followUpTracker.registerWindow(message.channel.id, message.author.id, question, answer);
+    this.logDmQuery(message, guildId, question, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
+  },
+
+  async handleDmFollowUp(message: Message, guildId: string, conversationHistory: Array<{ role: 'user' | 'bot'; content: string }>): Promise<void> {
+    if ('sendTyping' in message.channel) {
+      await message.channel.sendTyping();
+    }
+
+    const startTime = Date.now();
+    const context = contextBuilder.buildContext(guildId, message.content, []);
+
+    let conversationContext = '**Prior conversation with this user:**\n';
+    for (const entry of conversationHistory) {
+      const label = entry.role === 'user' ? 'User' : 'NubbyGPT';
+      conversationContext += `${label}: ${entry.content}\n`;
+    }
+    conversationContext += '\n';
+
+    const userPrompt = conversationContext + buildQueryUserPrompt(message.content, context);
+
+    const model = 'claude-sonnet-4-5-20250929';
+    const response = await createMessageWithRetry({
+      model,
+      max_tokens: 1500,
+      system: getPrompt('QUERY_SYSTEM_PROMPT'),
+      messages: [{ role: 'user', content: userPrompt }],
+    }, 'dm_followup');
+
+    usageTracker.track('dm_followup', model, {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    });
+
+    const answer = response.content[0].type === 'text'
+      ? response.content[0].text
+      : 'I could not generate a response.';
+
+    await this.sendReply(message, answer);
+    followUpTracker.recordFollowUpResponse(message.channel.id, message.author.id, answer);
+    this.logDmQuery(message, guildId, `[DM follow-up] ${message.content}`, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
+  },
+
+  logDmQuery(message: Message, guildId: string, question: string, answer: string, startTime: number, inputTokens?: number, outputTokens?: number): void {
+    try {
+      queryLogRepository.insert({
+        guild_id: guildId,
+        channel_id: message.channel.id,
+        asking_user_id: message.author.id,
+        question: `[DM] ${question}`,
+        answer,
+        context_tokens_used: inputTokens ?? null,
+        response_tokens_used: outputTokens ?? null,
+        model_used: 'claude-sonnet-4-5-20250929',
+        response_time_ms: Date.now() - startTime,
+      });
+    } catch (err) {
+      logger.error('Failed to log DM query', { error: err });
+    }
   },
 
   async sendReply(message: Message, text: string): Promise<void> {

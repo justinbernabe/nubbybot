@@ -8,7 +8,9 @@ export type CallType =
   | 'link_analysis'
   | 'followup_check'
   | 'followup_response'
-  | 'admin_chat';
+  | 'admin_chat'
+  | 'dm_query'
+  | 'dm_followup';
 
 interface UsageData {
   input_tokens: number;

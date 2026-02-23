@@ -6,7 +6,7 @@ import { startAdminServer, stopAdminServer } from './admin/server.js';
 import { autoProfileService } from './services/autoProfileService.js';
 import { logger } from './utils/logger.js';
 
-const VERSION = '0.3.1';
+const VERSION = '0.4.0';
 
 async function main() {
   logger.info(`Starting NubbyGPT v${VERSION}`);
