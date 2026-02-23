@@ -251,6 +251,15 @@ export const queryHandler = {
     return guild ? (guild.id as string) : null;
   },
 
+  buildDmPreamble(guildId: string): string {
+    const guild = guildRepository.findById(guildId);
+    const guildName = (guild?.name as string) ?? 'the server';
+    const primaryChannelId = config.bot.allowedChannelIds[0] ?? '';
+    const channel = primaryChannelId ? channelRepository.findById(primaryChannelId) : undefined;
+    const channelName = channel?.name as string | undefined;
+    return `[This is a DM. You are answering about the ${guildName} server${channelName ? `, specifically #${channelName}` : ''}. All context below comes from that server.]\n\n`;
+  },
+
   async handleDm(message: Message, guildId: string): Promise<void> {
     const question = message.content.trim();
     if (!question) {
@@ -282,9 +291,10 @@ export const queryHandler = {
     }
 
     const model = 'claude-sonnet-4-5-20250929';
-    const context = contextBuilder.buildContext(guildId, question, []);
+    const primaryChannelId = config.bot.allowedChannelIds[0] ?? '';
+    const context = contextBuilder.buildContext(guildId, question, [], primaryChannelId || undefined);
     logger.info(`DM query context: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
-    const userPrompt = buildQueryUserPrompt(question, context);
+    const userPrompt = this.buildDmPreamble(guildId) + buildQueryUserPrompt(question, context);
 
     const response = await createMessageWithRetry({
       model,
@@ -313,7 +323,8 @@ export const queryHandler = {
     }
 
     const startTime = Date.now();
-    const context = contextBuilder.buildContext(guildId, message.content, []);
+    const primaryChannelId = config.bot.allowedChannelIds[0] ?? '';
+    const context = contextBuilder.buildContext(guildId, message.content, [], primaryChannelId || undefined);
 
     let conversationContext = '**Prior conversation with this user:**\n';
     for (const entry of conversationHistory) {
@@ -322,7 +333,7 @@ export const queryHandler = {
     }
     conversationContext += '\n';
 
-    const userPrompt = conversationContext + buildQueryUserPrompt(message.content, context);
+    const userPrompt = this.buildDmPreamble(guildId) + conversationContext + buildQueryUserPrompt(message.content, context);
 
     const model = 'claude-sonnet-4-5-20250929';
     const response = await createMessageWithRetry({
