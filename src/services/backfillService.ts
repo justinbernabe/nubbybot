@@ -80,7 +80,7 @@ export const backfillService = {
     const channelCreatedTs = snowflakeToTimestamp(channel.id);
     let newestTs = Date.now();
 
-    let beforeId: string | undefined = (channelRecord?.last_backfill_message_id as string) || undefined;
+    let beforeId: string | undefined = force ? undefined : (channelRecord?.last_backfill_message_id as string) || undefined;
     let totalArchived = 0;
     let batchNumber = 0;
     let lastStatusLog = Date.now();
