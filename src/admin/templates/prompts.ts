@@ -5,7 +5,7 @@ export function promptsPage(): string {
     'Prompts',
     `
     <h1>Prompts</h1>
-    <p style="color:#808099;font-size:0.85rem;margin-bottom:1rem">Edit system prompts. Changes take effect on the next bot query — no restart needed.</p>
+    <p style="color:#999;font-size:0.85rem;margin-bottom:1.5rem">Edit system prompts. Changes take effect on the next bot query — no restart needed.</p>
     <div id="prompts-container"></div>
     <script>
       function escHtml(s) {

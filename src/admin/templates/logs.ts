@@ -14,7 +14,7 @@ export function logsPage(): string {
         <option value="debug">Debug</option>
       </select>
       <button class="secondary" onclick="clearLogs()">Clear View</button>
-      <span id="log-count" style="color:#808099;font-size:0.8rem;margin-left:auto"></span>
+      <span id="log-count" style="color:#999;font-size:0.8rem;margin-left:auto"></span>
     </div>
     <div class="log-container" id="log-container"></div>
     <script>
@@ -33,7 +33,7 @@ export function logsPage(): string {
         const ts = e.timestamp ? e.timestamp.substring(11, 23) : '';
         const lvl = e.level || 'info';
         div.innerHTML = '<span class="level-' + lvl + '">[' + lvl.toUpperCase().padEnd(5) + ']</span> '
-          + '<span style="color:#606080">' + escHtml(ts) + '</span> '
+          + '<span style="color:#bbb">' + escHtml(ts) + '</span> '
           + escHtml(e.message || '')
           + (e.error ? ' <span class="level-error">' + escHtml(String(e.error)) + '</span>' : '');
         return div;

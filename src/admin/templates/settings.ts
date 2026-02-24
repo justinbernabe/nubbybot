@@ -5,7 +5,7 @@ export function settingsPage(): string {
     'Settings',
     `
     <h1>Settings</h1>
-    <p style="color:#808099;font-size:0.85rem;margin-bottom:1rem">Current configuration (read-only, set via environment variables).</p>
+    <p style="color:#999;font-size:0.85rem;margin-bottom:1.5rem">Current configuration (read-only, set via environment variables).</p>
     <div class="card" id="settings-container"></div>
     <script>
       function escHtml(s) {

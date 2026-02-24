@@ -14,6 +14,7 @@ export function dashboardPage(): string {
       <div class="card stat"><div class="value" id="s-uptime">-</div><div class="label">Uptime</div></div>
     </div>
     <div class="card">
+      <div class="section-label">Details</div>
       <div class="settings-row"><span class="settings-key">Version</span><span class="settings-val" id="s-version">-</span></div>
       <div class="settings-row"><span class="settings-key">Messages Today</span><span class="settings-val" id="s-today">-</span></div>
       <div class="settings-row"><span class="settings-key">Queries Today</span><span class="settings-val" id="s-queries-today">-</span></div>
@@ -21,70 +22,70 @@ export function dashboardPage(): string {
       <div class="settings-row"><span class="settings-key">Backfill Complete</span><span class="settings-val" id="s-backfill">-</span></div>
       <div class="settings-row"><span class="settings-key">Links Analyzed</span><span class="settings-val" id="s-links">-</span></div>
     </div>
-    <div class="card" style="display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem">
-      <div>
-        <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.25rem">Link Scraper</div>
-        <div style="color:#808099;font-size:0.8rem">Analyze URLs from the last year of messages</div>
+    <div class="card" style="display:flex;flex-wrap:wrap;align-items:center;gap:1rem">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.2rem">Link Scraper</div>
+        <div style="color:#999;font-size:0.8rem">Analyze URLs from the last year of messages</div>
       </div>
-      <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:center">
-        <span id="scrape-status" style="color:#808099;font-size:0.8rem"></span>
+      <div style="display:flex;gap:0.75rem;align-items:center">
+        <span id="scrape-status" style="color:#999;font-size:0.8rem"></span>
         <button id="scrape-btn" onclick="startScrape()" style="min-height:44px">Scrape Links</button>
       </div>
     </div>
-    <div class="card" style="display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem">
-      <div>
-        <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.25rem">Profile Builder</div>
-        <div style="color:#808099;font-size:0.8rem">Build/refresh AI profiles for users with 10+ messages</div>
+    <div class="card" style="display:flex;flex-wrap:wrap;align-items:center;gap:1rem">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.2rem">Profile Builder</div>
+        <div style="color:#999;font-size:0.8rem">Build/refresh AI profiles for users with 10+ messages</div>
       </div>
-      <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:center">
-        <span id="profile-status" style="color:#808099;font-size:0.8rem"></span>
+      <div style="display:flex;gap:0.75rem;align-items:center">
+        <span id="profile-status" style="color:#999;font-size:0.8rem"></span>
         <button id="profile-btn" onclick="startProfileBuild()" style="min-height:44px">Build Profiles</button>
       </div>
     </div>
     <div class="card" id="cost-card" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
         <div>
-          <div style="font-size:0.9rem;font-weight:600">API Cost Analysis</div>
-          <div style="color:#808099;font-size:0.8rem">Token usage and estimated costs</div>
+          <div class="section-label" style="margin-bottom:0.25rem">API Cost Analysis</div>
+          <div style="color:#999;font-size:0.8rem">Token usage and estimated costs</div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:0.75rem;color:#808099">Active Follow-up Windows</div>
-          <div id="cost-followup-windows" style="font-size:1.1rem;font-weight:600;color:#7c8aff">-</div>
+          <div style="font-size:0.7rem;color:#999;text-transform:uppercase;letter-spacing:0.05em">Follow-up Windows</div>
+          <div id="cost-followup-windows" style="font-size:1.5rem;font-weight:800;color:#000">-</div>
         </div>
       </div>
-      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:0.75rem">
-        <div class="card stat" style="margin-bottom:0;background:#12121f;border:1px solid #1e1e30">
-          <div class="value" id="cost-today-calls" style="font-size:1.3rem">-</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:1rem">
+        <div class="card stat" style="margin-bottom:0;background:#fafafa;box-shadow:none;border:1px solid #f0f0f0">
+          <div class="value" id="cost-today-calls" style="font-size:1.4rem">-</div>
           <div class="label">API Calls Today</div>
         </div>
-        <div class="card stat" style="margin-bottom:0;background:#12121f;border:1px solid #1e1e30">
-          <div class="value" id="cost-today-tokens" style="font-size:1.3rem">-</div>
+        <div class="card stat" style="margin-bottom:0;background:#fafafa;box-shadow:none;border:1px solid #f0f0f0">
+          <div class="value" id="cost-today-tokens" style="font-size:1.4rem">-</div>
           <div class="label">Tokens Today</div>
         </div>
-        <div class="card stat" style="margin-bottom:0;background:#12121f;border:1px solid #1e1e30">
-          <div class="value" id="cost-today-est" style="font-size:1.3rem">-</div>
+        <div class="card stat" style="margin-bottom:0;background:#fafafa;box-shadow:none;border:1px solid #f0f0f0">
+          <div class="value" id="cost-today-est" style="font-size:1.4rem">-</div>
           <div class="label">Est. Cost Today</div>
         </div>
-        <div class="card stat" style="margin-bottom:0;background:#12121f;border:1px solid #1e1e30">
-          <div class="value" id="cost-alltime-est" style="font-size:1.3rem">-</div>
+        <div class="card stat" style="margin-bottom:0;background:#fafafa;box-shadow:none;border:1px solid #f0f0f0">
+          <div class="value" id="cost-alltime-est" style="font-size:1.4rem">-</div>
           <div class="label">Est. Total Cost</div>
         </div>
       </div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
           <thead>
-            <tr style="border-bottom:1px solid #2a2a4a;text-align:left">
-              <th style="padding:0.5rem 0.75rem;color:#808099">Function</th>
-              <th style="padding:0.5rem 0.75rem;color:#808099">Model</th>
-              <th style="padding:0.5rem 0.75rem;color:#808099;text-align:right">Calls</th>
-              <th style="padding:0.5rem 0.75rem;color:#808099;text-align:right">Input</th>
-              <th style="padding:0.5rem 0.75rem;color:#808099;text-align:right">Output</th>
-              <th style="padding:0.5rem 0.75rem;color:#808099">Cost</th>
-              <th style="padding:0.5rem 0.75rem;color:#808099;text-align:right">Est. $</th>
+            <tr style="border-bottom:2px solid #f0f0f0;text-align:left">
+              <th style="padding:0.6rem 0.75rem;color:#999;font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em">Function</th>
+              <th style="padding:0.6rem 0.75rem;color:#999;font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em">Model</th>
+              <th style="padding:0.6rem 0.75rem;color:#999;font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;text-align:right">Calls</th>
+              <th style="padding:0.6rem 0.75rem;color:#999;font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;text-align:right">Input</th>
+              <th style="padding:0.6rem 0.75rem;color:#999;font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;text-align:right">Output</th>
+              <th style="padding:0.6rem 0.75rem;color:#999;font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em">Cost</th>
+              <th style="padding:0.6rem 0.75rem;color:#999;font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;text-align:right">Est. $</th>
             </tr>
           </thead>
           <tbody id="cost-table-body">
-            <tr><td colspan="7" style="padding:1rem;text-align:center;color:#808099">Loading...</td></tr>
+            <tr><td colspan="7" style="padding:1.5rem;text-align:center;color:#999">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -126,8 +127,8 @@ export function dashboardPage(): string {
           if (d.running) {
             btn.disabled = true;
             btn.textContent = 'Running...';
-            status.textContent = 'Scrape in progress — check logs';
-            status.style.color = '#ffb347';
+            status.textContent = 'Scrape in progress';
+            status.style.color = '#b45000';
           } else {
             btn.disabled = false;
             btn.textContent = 'Scrape Links';
@@ -178,8 +179,8 @@ export function dashboardPage(): string {
           if (d.running) {
             btn.disabled = true;
             btn.textContent = 'Running...';
-            status.textContent = 'Building profiles — check logs';
-            status.style.color = '#ffb347';
+            status.textContent = 'Building profiles';
+            status.style.color = '#b45000';
           } else {
             btn.disabled = false;
             btn.textContent = 'Build Profiles';
@@ -242,15 +243,14 @@ export function dashboardPage(): string {
           while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
           if (d.byType && d.byType.length > 0) {
             for (const row of d.byType) {
-              const levelColor = row.costLevel === 'HIGH' ? '#e05555' : '#6bcc6b';
-              const levelBg = row.costLevel === 'HIGH' ? '#2a1a1a' : '#1a2a1a';
+              const isHigh = row.costLevel === 'HIGH';
               const shortModel = row.model.includes('haiku') ? 'Haiku' : 'Sonnet';
               const tr = document.createElement('tr');
-              tr.style.borderBottom = '1px solid #1e1e30';
-              const cellStyle = 'padding:0.4rem 0.75rem';
+              tr.style.borderBottom = '1px solid #f0f0f0';
+              const cellStyle = 'padding:0.5rem 0.75rem';
               const cells = [
-                { text: row.label, style: cellStyle },
-                { text: shortModel, style: cellStyle + ';color:#808099' },
+                { text: row.label, style: cellStyle + ';font-weight:500' },
+                { text: shortModel, style: cellStyle + ';color:#999' },
                 { text: fmt(row.callCount), style: cellStyle + ';text-align:right' },
                 { text: fmt(row.totalInput), style: cellStyle + ';text-align:right' },
                 { text: fmt(row.totalOutput), style: cellStyle + ';text-align:right' },
@@ -264,12 +264,14 @@ export function dashboardPage(): string {
               const tdLevel = document.createElement('td');
               tdLevel.style.cssText = cellStyle;
               const badge = document.createElement('span');
-              badge.style.cssText = 'background:' + levelBg + ';color:' + levelColor + ';padding:0.1rem 0.4rem;border-radius:4px;font-size:0.72rem;font-weight:600';
+              badge.style.cssText = isHigh
+                ? 'background:#000;color:#fff;padding:0.15rem 0.5rem;border-radius:100px;font-size:0.7rem;font-weight:600'
+                : 'background:#f0f0f0;color:#666;padding:0.15rem 0.5rem;border-radius:100px;font-size:0.7rem;font-weight:600';
               badge.textContent = row.costLevel;
               tdLevel.appendChild(badge);
               tr.appendChild(tdLevel);
               const tdCost = document.createElement('td');
-              tdCost.style.cssText = cellStyle + ';text-align:right';
+              tdCost.style.cssText = cellStyle + ';text-align:right;font-weight:600';
               tdCost.textContent = '$' + row.estimatedCost.toFixed(4);
               tr.appendChild(tdCost);
               tbody.appendChild(tr);
@@ -278,7 +280,7 @@ export function dashboardPage(): string {
             const tr = document.createElement('tr');
             const td = document.createElement('td');
             td.colSpan = 7;
-            td.style.cssText = 'padding:1rem;text-align:center;color:#808099';
+            td.style.cssText = 'padding:1.5rem;text-align:center;color:#999';
             td.textContent = 'No API calls tracked yet';
             tr.appendChild(td);
             tbody.appendChild(tr);
