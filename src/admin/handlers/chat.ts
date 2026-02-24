@@ -5,8 +5,7 @@ import { getPrompt } from '../../ai/promptManager.js';
 import { buildQueryUserPrompt } from '../../ai/promptTemplates.js';
 import { usageTracker } from '../../ai/usageTracker.js';
 import { getDb } from '../../database/client.js';
-import { sendJson, sendHtml, parseJsonBody } from '../middleware.js';
-import { chatPage } from '../templates/chat.js';
+import { sendJson, parseJsonBody } from '../middleware.js';
 import { linkAnalysisService } from '../../services/linkAnalysisService.js';
 import { autoProfileService } from '../../services/autoProfileService.js';
 import { trainingManager } from '../../ai/trainingManager.js';
@@ -14,10 +13,6 @@ import { guildRepository } from '../../database/repositories/guildRepository.js'
 import { channelRepository } from '../../database/repositories/channelRepository.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
-
-export function chatPageHandler(_req: IncomingMessage, res: ServerResponse): void {
-  sendHtml(res, chatPage());
-}
 
 export function guildsApiHandler(_req: IncomingMessage, res: ServerResponse): void {
   const guilds = getDb()

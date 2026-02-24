@@ -1,16 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { config } from '../../config.js';
-import { sendJson, sendHtml, parseJsonBody } from '../middleware.js';
-import { loginPage } from '../templates/login.js';
-
-export function loginPageHandler(_req: IncomingMessage, res: ServerResponse): void {
-  if (!config.admin.token) {
-    res.writeHead(302, { Location: '/' });
-    res.end();
-    return;
-  }
-  sendHtml(res, loginPage());
-}
+import { sendJson, parseJsonBody } from '../middleware.js';
 
 export async function loginApiHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!config.admin.token) {

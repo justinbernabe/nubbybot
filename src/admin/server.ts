@@ -1,29 +1,77 @@
 import { createServer, type Server } from 'node:http';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { join, extname } from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { Router } from './router.js';
 import { checkAuth } from './middleware.js';
-import { dashboardPageHandler, statsApiHandler, costsApiHandler } from './handlers/dashboard.js';
-import { logsPageHandler, logsApiHandler } from './handlers/logs.js';
-import { promptsPageHandler, promptsListApiHandler, promptUpdateApiHandler, promptDeleteApiHandler } from './handlers/prompts.js';
-import { settingsPageHandler, settingsApiHandler } from './handlers/settings.js';
-import { loginPageHandler, loginApiHandler } from './handlers/login.js';
-import { chatPageHandler, chatApiHandler, guildsApiHandler, linkScrapeApiHandler, linkScrapeStatusHandler, profileBuildApiHandler, profileBuildStatusHandler } from './handlers/chat.js';
+import { statsApiHandler, costsApiHandler } from './handlers/dashboard.js';
+import { logsApiHandler } from './handlers/logs.js';
+import { promptsListApiHandler, promptUpdateApiHandler, promptDeleteApiHandler } from './handlers/prompts.js';
+import { settingsApiHandler } from './handlers/settings.js';
+import { loginApiHandler } from './handlers/login.js';
+import { chatApiHandler, guildsApiHandler, linkScrapeApiHandler, linkScrapeStatusHandler, profileBuildApiHandler, profileBuildStatusHandler } from './handlers/chat.js';
 
 let server: Server | null = null;
+
+// Resolve static dir: works in both dev (dist/admin/server.js -> ../../admin-ui/dist)
+// and Docker (/app/dist/admin/server.js -> /app/admin-ui/dist)
+const STATIC_DIR = join(import.meta.dirname, '../../admin-ui/dist');
+
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+};
+
+function serveStaticFile(pathname: string, res: import('node:http').ServerResponse): boolean {
+  const filePath = join(STATIC_DIR, pathname);
+
+  // Prevent directory traversal
+  if (!filePath.startsWith(STATIC_DIR)) return false;
+
+  try {
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) return false;
+  } catch {
+    return false;
+  }
+
+  const ext = extname(filePath);
+  const mime = MIME_TYPES[ext] || 'application/octet-stream';
+  const content = readFileSync(filePath);
+
+  // Hashed assets get long cache, everything else no-cache
+  const isHashed = pathname.startsWith('/assets/');
+  const cacheControl = isHashed ? 'public, max-age=31536000, immutable' : 'no-cache';
+
+  res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': cacheControl });
+  res.end(content);
+  return true;
+}
+
+function serveSpaFallback(res: import('node:http').ServerResponse): void {
+  const indexPath = join(STATIC_DIR, 'index.html');
+  try {
+    const content = readFileSync(indexPath, 'utf-8');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+    res.end(content);
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Admin UI not built. Run: cd admin-ui && npm run build');
+  }
+}
 
 export function startAdminServer(): Server {
   const router = new Router();
 
-  // Pages
-  router.get('/', dashboardPageHandler);
-  router.get('/logs', logsPageHandler);
-  router.get('/prompts', promptsPageHandler);
-  router.get('/settings', settingsPageHandler);
-  router.get('/chat', chatPageHandler);
-  router.get('/login', loginPageHandler);
-
-  // API
+  // API routes only — no page handlers
   router.get('/api/stats', statsApiHandler);
   router.get('/api/costs', costsApiHandler);
   router.get('/api/logs', logsApiHandler);
@@ -41,18 +89,25 @@ export function startAdminServer(): Server {
 
   server = createServer(async (req, res) => {
     try {
-      const url = req.url ?? '/';
-      const isLoginRoute = url === '/login' || url === '/api/login';
+      const rawUrl = req.url ?? '/';
+      const url = rawUrl.split('?')[0];
 
-      if (!isLoginRoute && !checkAuth(req, res)) {
+      // Public routes: login page, login API, and static assets (JS/CSS for login page)
+      const isPublicRoute = url === '/login' || url === '/api/login' || url.startsWith('/assets/');
+
+      if (!isPublicRoute && !checkAuth(req, res)) {
         return;
       }
 
+      // 1. Try API routes first
       const handled = await router.handle(req, res);
-      if (!handled) {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not found');
-      }
+      if (handled) return;
+
+      // 2. Try serving a static file
+      if (serveStaticFile(url, res)) return;
+
+      // 3. SPA fallback — serve index.html for all other routes
+      serveSpaFallback(res);
     } catch (err) {
       logger.error('Admin panel error', { error: err });
       if (!res.headersSent) {

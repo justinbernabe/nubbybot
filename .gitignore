@@ -3,3 +3,5 @@ dist/
 .env
 *.log
 .DS_Store
+admin-ui/node_modules/
+admin-ui/dist/

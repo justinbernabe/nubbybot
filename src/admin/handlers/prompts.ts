@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getAllPromptInfo, setPromptOverride, clearPromptOverride } from '../../ai/promptManager.js';
-import { sendJson, sendHtml, parseJsonBody } from '../middleware.js';
-import { promptsPage } from '../templates/prompts.js';
+import { sendJson, parseJsonBody } from '../middleware.js';
 
 const VALID_KEYS = new Set([
   'QUERY_SYSTEM_PROMPT',
@@ -9,10 +8,6 @@ const VALID_KEYS = new Set([
   'PROFILE_ANALYSIS_SYSTEM_PROMPT',
   'LINK_ANALYSIS_SYSTEM_PROMPT',
 ]);
-
-export function promptsPageHandler(_req: IncomingMessage, res: ServerResponse): void {
-  sendHtml(res, promptsPage());
-}
 
 export function promptsListApiHandler(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, { prompts: getAllPromptInfo() });

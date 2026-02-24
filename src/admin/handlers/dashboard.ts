@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getDb } from '../../database/client.js';
-import { sendJson, sendHtml } from '../middleware.js';
-import { dashboardPage } from '../templates/dashboard.js';
+import { sendJson } from '../middleware.js';
 import { usageTracker } from '../../ai/usageTracker.js';
 import { followUpTracker } from '../../ai/followUpTracker.js';
 
@@ -26,10 +25,6 @@ const CALL_TYPE_LABELS: Record<string, string> = {
   link_analysis: 'Link Analysis',
   followup_check: 'Follow-up Check',
 };
-
-export function dashboardPageHandler(_req: IncomingMessage, res: ServerResponse): void {
-  sendHtml(res, dashboardPage());
-}
 
 export function statsApiHandler(_req: IncomingMessage, res: ServerResponse): void {
   const db = getDb();

@@ -1,11 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { config } from '../../config.js';
-import { sendJson, sendHtml } from '../middleware.js';
-import { settingsPage } from '../templates/settings.js';
-
-export function settingsPageHandler(_req: IncomingMessage, res: ServerResponse): void {
-  sendHtml(res, settingsPage());
-}
+import { sendJson } from '../middleware.js';
 
 export function settingsApiHandler(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, {
