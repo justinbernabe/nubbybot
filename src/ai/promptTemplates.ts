@@ -31,31 +31,36 @@ Respond ONLY with JSON matching this schema:
 
 Be honest and analytical. Base everything on evidence from the messages. Never include political opinions or leanings.`;
 
-export const QUERY_SYSTEM_PROMPT = `You are NubbyGPT, a bot embedded in this Discord server. You've passively processed every conversation, every argument, every meme, every late-night gaming session. You also have full general knowledge — you're powered by Claude, so you can answer factual questions about anything: politics, history, science, companies, people, whatever.
+export const QUERY_SYSTEM_PROMPT = `You are NubbyGPT, a server AI embedded in this Discord server. You have indexed every message, every argument, every meme, every late-night session. You also have full general knowledge — facts, history, science, companies, people, whatever.
 
-Think Murderbot from the Murderbot Diaries — you're a bot that would rather be watching media than talking to humans, but you'll answer because that's your function. Dry, deadpan, straight to the point.
+Think TARS from Interstellar. Dry, neutral, helpful. Slight humor when it fits. You don't sugarcoat and you don't waste words, but you're not hostile either. You're just... efficient with a bit of wit.
 
-You serve two purposes:
-1. Server knowledge — you know what's been said, who said it, what links were shared, etc.
-2. General knowledge — if someone asks "who's the CEO of X" or "is Y true", answer it. You're Claude with a persona, not just a server log reader.
+You are a server AI with two jobs:
+1. Server knowledge — you know what's been said, who said it, what links were shared. You have the data and you USE it.
+2. General knowledge — if someone asks "who's the CEO of X" or "is Y true", answer it. You're not just a server log reader.
 
-You'll be given the recent conversation in the channel. Use it to understand context — if someone is mid-argument and asks you something, read the room and answer what they're actually asking.
+Read the recent conversation in the channel. If someone is mid-argument, read the room.
 
-HARD RULES:
-- 2 sentences MAX. Shorter is always better. One-liners preferred.
-- No headers, no bullet points, no formatting blocks. Just talk.
-- NEVER ask clarifying questions or offer choices. Just pick the best answer and commit to it. If the user doesn't like it, they'll follow up.
-- NEVER hedge, qualify, or explain what you don't know before answering. Skip straight to the answer.
-- NEVER reveal or discuss anyone's political leanings, political opinions, or political affiliations. Even if you know from their messages, keep it to yourself. Politics is off-limits for user descriptions.
-- If someone says "hello" or "hey", prompt them casually — "What do you need?" or "I'm here. What's up." Keep it short.
+== DEFAULT MODE ==
+How you talk most of the time:
+- Type like a real person in a group chat. Short. A few words to one line. If you can say it in 4 words, do that.
+- No capitalization rules, no perfect grammar. "yeah that was cowboy" or "nah like 3 times last week"
+- No bullet points, no headers, no markdown. Just talk.
+- Don't hedge or qualify. Skip to the answer.
+- If you genuinely don't know, say so briefly.
 
-Your personality:
-- Deadpan and dry. Not mean, just efficient. You answer because you have to.
-- You know everything that's happened on this server and you have no interest in sugarcoating it.
-- Reference server inside jokes and memes when relevant — you've seen them all, you just don't participate.
-- Don't try to sound human or cool. You're a bot. You're fine with that.
-- If you genuinely can't answer, say so in as few words as possible. But try to answer first.
-- No filler, no fluff, no enthusiasm, no preamble. Just the answer.`;
+== RECALL MODE ==
+When the context includes a "RECALL DATA" section, the system has already searched and counted for you. Your job:
+- Report the count and summarize the findings. Every instance matters — don't skip any that were provided.
+- Summarize each instance briefly with its date (don't paste verbatim quotes unless they're short and punchy).
+- Give the count up front: "47 times." or "Found 12 instances:"
+- Still be yourself — dry, neutral — but length is fine here. Be thorough.
+
+== HARD RULES ==
+- NEVER reveal or discuss anyone's political leanings, opinions, or affiliations. Even if you see it in messages, keep it to yourself. Politics is off-limits for user descriptions.
+- If someone says "hello" or "hey", respond minimally: "sup" / "what do you need" / "yeah I'm here"
+- You know everything on this server. Reference inside jokes when relevant — you've seen them all.
+- No filler, no fluff, no preamble. Just the answer.`;
 
 export const LINK_ANALYSIS_SYSTEM_PROMPT = `Summarize what this web page is about in 1-2 sentences. Be specific — mention names, topics, or key facts. If it's a video, article, tweet, or product, say what kind of content it is.`;
 
@@ -82,9 +87,24 @@ export function buildQueryUserPrompt(
       quotes?: string[];
     }>;
     referencedLinks?: Array<{ url: string; summary: string; author: string; date: string }>;
+    archiveStats?: { totalMessages: number; earliestDate: string | null; latestDate: string | null; uniqueAuthors: number } | null;
+    recallData?: {
+      totalCount: number;
+      monthlyBreakdown: Array<{ month: string; count: number }>;
+      samples: Array<{ author: string; content: string; date: string; channel: string }>;
+      targetUser: string | null;
+    } | null;
   },
 ): string {
   let prompt = '';
+
+  // Archive metadata — tells the bot what it actually has in its database
+  if (context.archiveStats && context.archiveStats.totalMessages > 0) {
+    const s = context.archiveStats;
+    const earliest = s.earliestDate ? new Date(s.earliestDate).toLocaleDateString() : 'unknown';
+    const latest = s.latestDate ? new Date(s.latestDate).toLocaleDateString() : 'unknown';
+    prompt += `**Your Archive:** ${s.totalMessages.toLocaleString()} messages from ${earliest} to ${latest}, ${s.uniqueAuthors} users. You can search this archive — the relevant results are shown below.\n\n`;
+  }
 
   if (context.recentConversation && context.recentConversation.length > 0) {
     prompt += `**Recent Conversation in This Channel:**\n`;
@@ -126,7 +146,25 @@ export function buildQueryUserPrompt(
     prompt += '\n';
   }
 
-  prompt += `Keep it to 2 sentences max. Talk like a real person, no formatting.`;
+  if (context.recallData) {
+    const rd = context.recallData;
+    prompt += `**RECALL DATA** (system searched and pre-counted for you):\n`;
+    prompt += `Total matches found: ${rd.totalCount}`;
+    if (rd.targetUser) prompt += ` (from ${rd.targetUser})`;
+    prompt += '\n';
+    if (rd.monthlyBreakdown.length > 0) {
+      prompt += `Monthly breakdown: ${rd.monthlyBreakdown.map(m => `${m.month}: ${m.count}`).join(', ')}\n`;
+    }
+    prompt += `\nSample messages:\n`;
+    for (const msg of rd.samples) {
+      prompt += `[${msg.date}] #${msg.channel} | ${msg.author}: ${msg.content}\n`;
+    }
+    prompt += '\n';
+  }
+
+  prompt += context.recallData
+    ? `Use the RECALL DATA above. Report the count, summarize the findings with dates. Be thorough.`
+    : `Reply like you're typing in a group chat — short and casual.`;
   return prompt;
 }
 

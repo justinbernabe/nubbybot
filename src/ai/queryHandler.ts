@@ -1,8 +1,9 @@
 import type { Message } from 'discord.js';
 import { createMessageWithRetry } from './claude.js';
-import { contextBuilder } from './contextBuilder.js';
+import { contextBuilder, detectQueryMode } from './contextBuilder.js';
 import { getPrompt } from './promptManager.js';
 import { buildQueryUserPrompt, buildSummarizePrompt } from './promptTemplates.js';
+import { startLoadingReply } from './loadingMessages.js';
 import { messageRepository } from '../database/repositories/messageRepository.js';
 import { userRepository } from '../database/repositories/userRepository.js';
 import { channelRepository } from '../database/repositories/channelRepository.js';
@@ -83,62 +84,75 @@ export const queryHandler = {
       return;
     }
 
-    if ('sendTyping' in message.channel) {
-      await message.channel.sendTyping();
-    }
-
+    const loader = startLoadingReply(message);
     const startTime = Date.now();
 
-    // Check if this is a summarize request
-    if (isSummarizeRequest(question)) {
-      const answer = await this.handleSummarize(question, message.guild.id, message.channel.id);
-      await this.sendReply(message, answer);
-      this.logQuery(message, question, answer, startTime);
-      return;
+    try {
+      // Check if this is a summarize request
+      if (isSummarizeRequest(question)) {
+        const answer = await this.handleSummarize(question, message.guild.id, message.channel.id);
+        loader.stop();
+        if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+        this.logQuery(message, question, answer, startTime);
+        return;
+      }
+
+      // Regular question
+      const mentionedUserIds = message.mentions.users
+        .filter(u => u.id !== message.client.user!.id)
+        .map(u => u.id);
+
+      const mode = detectQueryMode(question);
+      const model = 'claude-sonnet-4-5-20250929';
+      const context = contextBuilder.buildContext(message.guild.id, question, mentionedUserIds, message.channel.id, mode);
+      logger.info(`Query context [${mode}]: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
+      const userPrompt = buildQueryUserPrompt(question, context);
+
+      const maxTokens = mode === 'recall' ? 4096 : 1500;
+      const response = await createMessageWithRetry({
+        model,
+        max_tokens: maxTokens,
+        system: getPrompt('QUERY_SYSTEM_PROMPT'),
+        messages: [{ role: 'user', content: userPrompt }],
+      }, 'query');
+
+      loader.stop();
+
+      usageTracker.track('query', model, {
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+      });
+
+      const answer = response.content[0].type === 'text'
+        ? response.content[0].text
+        : 'I could not generate a response.';
+
+      if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+      followUpTracker.registerWindow(message.channel.id, message.author.id, question, answer);
+      this.logQuery(message, question, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
+    } catch (err) {
+      loader.stop();
+      logger.error('Query failed', { error: err });
+      if (!loader.timedOut()) {
+        const loadingMsg = loader.getMessage();
+        if (loadingMsg) await loadingMsg.edit('something went wrong. try again?').catch(() => {});
+      }
     }
-
-    // Regular question
-    const mentionedUserIds = message.mentions.users
-      .filter(u => u.id !== message.client.user!.id)
-      .map(u => u.id);
-
-    const model = 'claude-sonnet-4-5-20250929';
-    const context = contextBuilder.buildContext(message.guild.id, question, mentionedUserIds, message.channel.id);
-    logger.info(`Query context: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
-    const userPrompt = buildQueryUserPrompt(question, context);
-
-    const response = await createMessageWithRetry({
-      model,
-      max_tokens: 1500,
-      system: getPrompt('QUERY_SYSTEM_PROMPT'),
-      messages: [{ role: 'user', content: userPrompt }],
-    }, 'query');
-
-    usageTracker.track('query', model, {
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
-    });
-
-    const answer = response.content[0].type === 'text'
-      ? response.content[0].text
-      : 'I could not generate a response.';
-
-    await this.sendReply(message, answer);
-    followUpTracker.registerWindow(message.channel.id, message.author.id, question, answer);
-    this.logQuery(message, question, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
   },
 
   async answerQuestion(question: string, guildId: string, channelId: string, mentionedUserIds: string[]): Promise<string> {
-    const context = contextBuilder.buildContext(guildId, question, mentionedUserIds, channelId);
+    const mode = detectQueryMode(question);
+    const context = contextBuilder.buildContext(guildId, question, mentionedUserIds, channelId, mode);
 
-    logger.info(`Query context: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
+    logger.info(`Query context [${mode}]: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
 
     const userPrompt = buildQueryUserPrompt(question, context);
 
+    const maxTokens = mode === 'recall' ? 4096 : 1500;
     const model = 'claude-sonnet-4-5-20250929';
     const response = await createMessageWithRetry({
       model,
-      max_tokens: 1500,
+      max_tokens: maxTokens,
       system: getPrompt('QUERY_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: userPrompt }],
     }, 'query');
@@ -156,44 +170,54 @@ export const queryHandler = {
   async handleFollowUp(message: Message, conversationHistory: Array<{ role: 'user' | 'bot'; content: string }>): Promise<void> {
     if (!message.guild) return;
 
-    if ('sendTyping' in message.channel) {
-      await message.channel.sendTyping();
-    }
-
+    const loader = startLoadingReply(message);
     const startTime = Date.now();
 
-    const context = contextBuilder.buildContext(message.guild.id, message.content, [], message.channel.id);
+    try {
+      const mode = detectQueryMode(message.content);
+      const context = contextBuilder.buildContext(message.guild.id, message.content, [], message.channel.id, mode);
 
-    // Prepend conversation history to the prompt
-    let conversationContext = '**Prior conversation with this user:**\n';
-    for (const entry of conversationHistory) {
-      const label = entry.role === 'user' ? 'User' : 'NubbyGPT';
-      conversationContext += `${label}: ${entry.content}\n`;
+      // Prepend conversation history to the prompt
+      let conversationContext = '**Prior conversation with this user:**\n';
+      for (const entry of conversationHistory) {
+        const label = entry.role === 'user' ? 'User' : 'NubbyGPT';
+        conversationContext += `${label}: ${entry.content}\n`;
+      }
+      conversationContext += '\n';
+
+      const userPrompt = conversationContext + buildQueryUserPrompt(message.content, context);
+
+      const maxTokens = mode === 'recall' ? 4096 : 1500;
+      const model = 'claude-sonnet-4-5-20250929';
+      const response = await createMessageWithRetry({
+        model,
+        max_tokens: maxTokens,
+        system: getPrompt('QUERY_SYSTEM_PROMPT'),
+        messages: [{ role: 'user', content: userPrompt }],
+      }, 'followup');
+
+      loader.stop();
+
+      usageTracker.track('followup_response', model, {
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+      });
+
+      const answer = response.content[0].type === 'text'
+        ? response.content[0].text
+        : 'I could not generate a response.';
+
+      if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+      followUpTracker.recordFollowUpResponse(message.channel.id, message.author.id, answer);
+      this.logQuery(message, `[follow-up] ${message.content}`, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
+    } catch (err) {
+      loader.stop();
+      logger.error('Follow-up query failed', { error: err });
+      if (!loader.timedOut()) {
+        const loadingMsg = loader.getMessage();
+        if (loadingMsg) await loadingMsg.edit('something went wrong. try again?').catch(() => {});
+      }
     }
-    conversationContext += '\n';
-
-    const userPrompt = conversationContext + buildQueryUserPrompt(message.content, context);
-
-    const model = 'claude-sonnet-4-5-20250929';
-    const response = await createMessageWithRetry({
-      model,
-      max_tokens: 1500,
-      system: getPrompt('QUERY_SYSTEM_PROMPT'),
-      messages: [{ role: 'user', content: userPrompt }],
-    }, 'followup');
-
-    usageTracker.track('followup_response', model, {
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
-    });
-
-    const answer = response.content[0].type === 'text'
-      ? response.content[0].text
-      : 'I could not generate a response.';
-
-    await this.sendReply(message, answer);
-    followUpTracker.recordFollowUpResponse(message.channel.id, message.author.id, answer);
-    this.logQuery(message, `[follow-up] ${message.content}`, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
   },
 
   async handleSummarize(question: string, guildId: string, channelId: string): Promise<string> {
@@ -276,85 +300,107 @@ export const queryHandler = {
       }
     }
 
-    if ('sendTyping' in message.channel) {
-      await message.channel.sendTyping();
-    }
-
+    const loader = startLoadingReply(message);
     const startTime = Date.now();
 
-    // Summarize requests default to server-wide in DMs
-    if (isSummarizeRequest(question)) {
-      const answer = await this.handleSummarize(question, guildId, '');
-      await this.sendReply(message, answer);
-      this.logDmQuery(message, guildId, question, answer, startTime);
-      return;
+    try {
+      // Summarize requests default to server-wide in DMs
+      if (isSummarizeRequest(question)) {
+        const answer = await this.handleSummarize(question, guildId, '');
+        loader.stop();
+        if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+        this.logDmQuery(message, guildId, question, answer, startTime);
+        return;
+      }
+
+      const mode = detectQueryMode(question);
+      const model = 'claude-sonnet-4-5-20250929';
+      const primaryChannelId = config.bot.allowedChannelIds[0] ?? '';
+      const context = contextBuilder.buildContext(guildId, question, [], primaryChannelId || undefined, mode);
+      logger.info(`DM query context [${mode}]: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
+      const userPrompt = this.buildDmPreamble(guildId) + buildQueryUserPrompt(question, context);
+
+      const maxTokens = mode === 'recall' ? 4096 : 1500;
+      const response = await createMessageWithRetry({
+        model,
+        max_tokens: maxTokens,
+        system: getPrompt('QUERY_SYSTEM_PROMPT'),
+        messages: [{ role: 'user', content: userPrompt }],
+      }, 'dm_query');
+
+      loader.stop();
+
+      usageTracker.track('dm_query', model, {
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+      });
+
+      const answer = response.content[0].type === 'text'
+        ? response.content[0].text
+        : 'I could not generate a response.';
+
+      if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+      followUpTracker.registerWindow(message.channel.id, message.author.id, question, answer);
+      this.logDmQuery(message, guildId, question, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
+    } catch (err) {
+      loader.stop();
+      logger.error('DM query failed', { error: err });
+      if (!loader.timedOut()) {
+        const loadingMsg = loader.getMessage();
+        if (loadingMsg) await loadingMsg.edit('something went wrong. try again?').catch(() => {});
+      }
     }
-
-    const model = 'claude-sonnet-4-5-20250929';
-    const primaryChannelId = config.bot.allowedChannelIds[0] ?? '';
-    const context = contextBuilder.buildContext(guildId, question, [], primaryChannelId || undefined);
-    logger.info(`DM query context: ${context.relevantMessages.length} messages, ${context.userProfiles.length} profiles`);
-    const userPrompt = this.buildDmPreamble(guildId) + buildQueryUserPrompt(question, context);
-
-    const response = await createMessageWithRetry({
-      model,
-      max_tokens: 1500,
-      system: getPrompt('QUERY_SYSTEM_PROMPT'),
-      messages: [{ role: 'user', content: userPrompt }],
-    }, 'dm_query');
-
-    usageTracker.track('dm_query', model, {
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
-    });
-
-    const answer = response.content[0].type === 'text'
-      ? response.content[0].text
-      : 'I could not generate a response.';
-
-    await this.sendReply(message, answer);
-    followUpTracker.registerWindow(message.channel.id, message.author.id, question, answer);
-    this.logDmQuery(message, guildId, question, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
   },
 
   async handleDmFollowUp(message: Message, guildId: string, conversationHistory: Array<{ role: 'user' | 'bot'; content: string }>): Promise<void> {
-    if ('sendTyping' in message.channel) {
-      await message.channel.sendTyping();
-    }
-
+    const loader = startLoadingReply(message);
     const startTime = Date.now();
-    const primaryChannelId = config.bot.allowedChannelIds[0] ?? '';
-    const context = contextBuilder.buildContext(guildId, message.content, [], primaryChannelId || undefined);
 
-    let conversationContext = '**Prior conversation with this user:**\n';
-    for (const entry of conversationHistory) {
-      const label = entry.role === 'user' ? 'User' : 'NubbyGPT';
-      conversationContext += `${label}: ${entry.content}\n`;
+    try {
+      const mode = detectQueryMode(message.content);
+      const primaryChannelId = config.bot.allowedChannelIds[0] ?? '';
+      const context = contextBuilder.buildContext(guildId, message.content, [], primaryChannelId || undefined, mode);
+
+      let conversationContext = '**Prior conversation with this user:**\n';
+      for (const entry of conversationHistory) {
+        const label = entry.role === 'user' ? 'User' : 'NubbyGPT';
+        conversationContext += `${label}: ${entry.content}\n`;
+      }
+      conversationContext += '\n';
+
+      const userPrompt = this.buildDmPreamble(guildId) + conversationContext + buildQueryUserPrompt(message.content, context);
+
+      const maxTokens = mode === 'recall' ? 4096 : 1500;
+      const model = 'claude-sonnet-4-5-20250929';
+      const response = await createMessageWithRetry({
+        model,
+        max_tokens: maxTokens,
+        system: getPrompt('QUERY_SYSTEM_PROMPT'),
+        messages: [{ role: 'user', content: userPrompt }],
+      }, 'dm_followup');
+
+      loader.stop();
+
+      usageTracker.track('dm_followup', model, {
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+      });
+
+      const answer = response.content[0].type === 'text'
+        ? response.content[0].text
+        : 'I could not generate a response.';
+
+      if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+      followUpTracker.recordFollowUpResponse(message.channel.id, message.author.id, answer);
+      this.logDmQuery(message, guildId, `[DM follow-up] ${message.content}`, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
+    } catch (err) {
+      loader.stop();
+      logger.error('DM follow-up query failed', { error: err });
+      if (!loader.timedOut()) {
+        const loadingMsg = loader.getMessage();
+        if (loadingMsg) await loadingMsg.edit('something went wrong. try again?').catch(() => {});
+      }
     }
-    conversationContext += '\n';
-
-    const userPrompt = this.buildDmPreamble(guildId) + conversationContext + buildQueryUserPrompt(message.content, context);
-
-    const model = 'claude-sonnet-4-5-20250929';
-    const response = await createMessageWithRetry({
-      model,
-      max_tokens: 1500,
-      system: getPrompt('QUERY_SYSTEM_PROMPT'),
-      messages: [{ role: 'user', content: userPrompt }],
-    }, 'dm_followup');
-
-    usageTracker.track('dm_followup', model, {
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
-    });
-
-    const answer = response.content[0].type === 'text'
-      ? response.content[0].text
-      : 'I could not generate a response.';
-
-    await this.sendReply(message, answer);
-    followUpTracker.recordFollowUpResponse(message.channel.id, message.author.id, answer);
-    this.logDmQuery(message, guildId, `[DM follow-up] ${message.content}`, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
   },
 
   logDmQuery(message: Message, guildId: string, question: string, answer: string, startTime: number, inputTokens?: number, outputTokens?: number): void {
@@ -375,7 +421,27 @@ export const queryHandler = {
     }
   },
 
-  async sendReply(message: Message, text: string): Promise<void> {
+  async sendReply(message: Message, text: string, loadingMsg?: Message | null): Promise<void> {
+    if (loadingMsg) {
+      // Edit the loading message with the real answer
+      try {
+        if (text.length <= 2000) {
+          await loadingMsg.edit(text);
+          return;
+        }
+        // For long answers: edit first chunk, send rest as new messages
+        const chunks = splitMessage(text, 1990);
+        await loadingMsg.edit(chunks[0]);
+        for (let i = 1; i < chunks.length; i++) {
+          if ('send' in message.channel) await message.channel.send(chunks[i]);
+        }
+        return;
+      } catch {
+        // If edit fails, fall through to send as new message
+        logger.warn('Failed to edit loading message, sending as new reply');
+      }
+    }
+
     if (text.length <= 2000) {
       await message.reply(text);
     } else {

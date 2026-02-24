@@ -5,6 +5,61 @@ import { channelRepository } from '../database/repositories/channelRepository.js
 import { linkRepository } from '../database/repositories/linkRepository.js';
 import { logger } from '../utils/logger.js';
 
+export type QueryMode = 'default' | 'recall';
+
+const RECALL_PATTERNS = [
+  /every\s+time/i,
+  /all\s+the\s+times/i,
+  /how\s+many\s+times/i,
+  /list\s+every/i,
+  /show\s+me\s+all/i,
+  /give\s+me\s+(all|every)/i,
+  /list\s+all/i,
+  /how\s+often/i,
+  /find\s+(every|all)/i,
+];
+
+export function detectQueryMode(question: string): QueryMode {
+  return RECALL_PATTERNS.some(p => p.test(question)) ? 'recall' : 'default';
+}
+
+function resolveUserIdFromQuestion(question: string, guildId: string): string | null {
+  const allUsers = userRepository.findAllNonBot();
+  const questionLower = question.toLowerCase();
+
+  for (const user of allUsers) {
+    const username = (user.username as string).toLowerCase();
+    const displayName = (user.global_display_name as string | null)?.toLowerCase();
+
+    let matched = questionLower.includes(username) || (displayName && questionLower.includes(displayName));
+    if (!matched) {
+      const nicknames = userRepository.getNicknames(user.id as string, guildId);
+      matched = nicknames.some((n) => {
+        const nick = (n.nickname as string | null)?.toLowerCase();
+        const display = (n.display_name as string | null)?.toLowerCase();
+        return (nick && questionLower.includes(nick)) || (display && questionLower.includes(display));
+      });
+    }
+
+    if (matched) return user.id as string;
+  }
+  return null;
+}
+
+interface ArchiveStats {
+  totalMessages: number;
+  earliestDate: string | null;
+  latestDate: string | null;
+  uniqueAuthors: number;
+}
+
+interface RecallData {
+  totalCount: number;
+  monthlyBreakdown: Array<{ month: string; count: number }>;
+  samples: Array<{ author: string; content: string; date: string; channel: string }>;
+  targetUser: string | null;
+}
+
 interface QueryContext {
   recentConversation: Array<{
     author: string;
@@ -32,16 +87,30 @@ interface QueryContext {
     author: string;
     date: string;
   }>;
+  archiveStats: ArchiveStats | null;
+  recallData: RecallData | null;
 }
 
 export const contextBuilder = {
-  buildContext(guildId: string, question: string, mentionedUserIds: string[], channelId?: string): QueryContext {
+  buildContext(guildId: string, question: string, mentionedUserIds: string[], channelId?: string, mode: QueryMode = 'default'): QueryContext {
     const context: QueryContext = {
       recentConversation: [],
       relevantMessages: [],
       userProfiles: [],
       referencedLinks: [],
+      archiveStats: null,
+      recallData: null,
     };
+
+    // Fetch archive metadata so the bot knows what it has
+    try {
+      const stats = messageRepository.getGuildStats(guildId);
+      if (stats.totalMessages > 0) {
+        context.archiveStats = stats;
+      }
+    } catch (err) {
+      logger.warn('Failed to fetch archive stats', { error: err });
+    }
 
     // 0. Fetch recent conversation from the current channel for context awareness
     if (channelId) {
@@ -91,29 +160,105 @@ export const contextBuilder = {
 
     // 2. Full-text search for relevant messages
     try {
-      // Sanitize for FTS5: wrap terms in quotes for phrase matching
       const sanitized = question.replace(/[^\w\s]/g, '').trim();
       if (sanitized) {
-        const searchResults = messageRepository.searchMessages(guildId, sanitized, 30);
+        const ftsLimit = mode === 'recall' ? 200 : 30;
+
+        // In recall mode, try to filter by a specific user
+        let targetAuthorId: string | undefined;
+        if (mode === 'recall') {
+          if (mentionedUserIds.length > 0) {
+            targetAuthorId = mentionedUserIds[0];
+          } else {
+            const resolved = resolveUserIdFromQuestion(question, guildId);
+            if (resolved) targetAuthorId = resolved;
+          }
+        }
+
+        const searchResults = messageRepository.searchMessages(guildId, sanitized, ftsLimit, targetAuthorId);
         const authorCache = new Map<string, string>();
         const channelCache = new Map<string, string>();
 
-        for (const msg of searchResults) {
-          if (!authorCache.has(msg.author_id)) {
-            const user = userRepository.findById(msg.author_id);
-            authorCache.set(msg.author_id, ((user?.global_display_name ?? user?.username) as string) ?? msg.author_id);
-          }
-          if (!channelCache.has(msg.channel_id)) {
-            const ch = channelRepository.findById(msg.channel_id);
-            channelCache.set(msg.channel_id, (ch?.name as string) ?? msg.channel_id);
+        if (mode === 'recall' && searchResults.length > 0) {
+          // Pre-process locally: count, group by month, take samples
+          const resolveAuthor = (authorId: string): string => {
+            if (!authorCache.has(authorId)) {
+              const user = userRepository.findById(authorId);
+              authorCache.set(authorId, ((user?.global_display_name ?? user?.username) as string) ?? authorId);
+            }
+            return authorCache.get(authorId)!;
+          };
+          const resolveChannel = (chId: string): string => {
+            if (!channelCache.has(chId)) {
+              const ch = channelRepository.findById(chId);
+              channelCache.set(chId, (ch?.name as string) ?? chId);
+            }
+            return channelCache.get(chId)!;
+          };
+
+          // Group by month
+          const monthCounts = new Map<string, number>();
+          const allResults: Array<{ author: string; content: string; date: string; channel: string }> = [];
+          for (const msg of searchResults) {
+            const d = new Date(msg.message_created_at);
+            const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            monthCounts.set(monthKey, (monthCounts.get(monthKey) ?? 0) + 1);
+            allResults.push({
+              author: resolveAuthor(msg.author_id),
+              content: msg.content,
+              date: d.toLocaleDateString(),
+              channel: resolveChannel(msg.channel_id),
+            });
           }
 
-          context.relevantMessages.push({
-            author: authorCache.get(msg.author_id)!,
-            content: msg.content,
-            date: new Date(msg.message_created_at).toLocaleDateString(),
-            channel: channelCache.get(msg.channel_id)!,
+          const monthlyBreakdown = Array.from(monthCounts.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([month, count]) => ({ month, count }));
+
+          // Take up to 30 evenly spaced samples for Claude context
+          const maxSamples = 30;
+          let samples: typeof allResults;
+          if (allResults.length <= maxSamples) {
+            samples = allResults;
+          } else {
+            const step = allResults.length / maxSamples;
+            samples = [];
+            for (let i = 0; i < maxSamples; i++) {
+              samples.push(allResults[Math.floor(i * step)]);
+            }
+          }
+
+          const targetUserName = targetAuthorId ? resolveAuthor(targetAuthorId) : null;
+
+          context.recallData = {
+            totalCount: searchResults.length,
+            monthlyBreakdown,
+            samples,
+            targetUser: targetUserName,
+          };
+
+          logger.info(`Recall mode: ${searchResults.length} results, ${samples.length} samples sent to Claude`, {
+            targetUser: targetUserName,
           });
+        } else {
+          // Default mode: add all results directly
+          for (const msg of searchResults) {
+            if (!authorCache.has(msg.author_id)) {
+              const user = userRepository.findById(msg.author_id);
+              authorCache.set(msg.author_id, ((user?.global_display_name ?? user?.username) as string) ?? msg.author_id);
+            }
+            if (!channelCache.has(msg.channel_id)) {
+              const ch = channelRepository.findById(msg.channel_id);
+              channelCache.set(msg.channel_id, (ch?.name as string) ?? msg.channel_id);
+            }
+
+            context.relevantMessages.push({
+              author: authorCache.get(msg.author_id)!,
+              content: msg.content,
+              date: new Date(msg.message_created_at).toLocaleDateString(),
+              channel: channelCache.get(msg.channel_id)!,
+            });
+          }
         }
       }
     } catch (err) {
@@ -166,11 +311,12 @@ export const contextBuilder = {
       return true;
     });
 
-    // Trim to ~80k chars to stay well within Claude's context window
+    // Trim to stay within Claude's context window
+    const charLimit = mode === 'recall' ? 120_000 : 80_000;
     let totalChars = 0;
     context.relevantMessages = context.relevantMessages.filter(msg => {
       totalChars += msg.content.length + msg.author.length + 50;
-      return totalChars < 80_000;
+      return totalChars < charLimit;
     });
 
     // 5. Search for relevant link analyses

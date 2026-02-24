@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createMessageWithRetry } from '../../ai/claude.js';
-import { contextBuilder } from '../../ai/contextBuilder.js';
+import { contextBuilder, detectQueryMode } from '../../ai/contextBuilder.js';
 import { getPrompt } from '../../ai/promptManager.js';
 import { buildQueryUserPrompt } from '../../ai/promptTemplates.js';
 import { usageTracker } from '../../ai/usageTracker.js';
@@ -10,6 +10,9 @@ import { chatPage } from '../templates/chat.js';
 import { linkAnalysisService } from '../../services/linkAnalysisService.js';
 import { autoProfileService } from '../../services/autoProfileService.js';
 import { trainingManager } from '../../ai/trainingManager.js';
+import { guildRepository } from '../../database/repositories/guildRepository.js';
+import { channelRepository } from '../../database/repositories/channelRepository.js';
+import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 
 export function chatPageHandler(_req: IncomingMessage, res: ServerResponse): void {
@@ -45,14 +48,25 @@ export async function chatApiHandler(req: IncomingMessage, res: ServerResponse):
       return;
     }
 
-    // Build context identical to Discord: FTS search + profiles + links
-    const context = contextBuilder.buildContext(body.guildId, body.question, []);
-    const fullPrompt = buildQueryUserPrompt(body.question, context);
+    // Build context identical to Discord: FTS search + profiles + links + recent channel convo
+    const mode = detectQueryMode(body.question);
+    const primaryChannelId = config.bot.allowedChannelIds[0] ?? '';
+    const context = contextBuilder.buildContext(body.guildId, body.question, [], primaryChannelId || undefined, mode);
 
+    // Add preamble so Claude knows which server/channel it's answering about
+    const guild = guildRepository.findById(body.guildId);
+    const guildName = (guild?.name as string) ?? 'the server';
+    const channel = primaryChannelId ? channelRepository.findById(primaryChannelId) : undefined;
+    const channelName = channel?.name as string | undefined;
+    const preamble = `[Admin panel query. You are answering about the ${guildName} server${channelName ? `, specifically #${channelName}` : ''}. All context below comes from that server.]\n\n`;
+
+    const fullPrompt = preamble + buildQueryUserPrompt(body.question, context);
+
+    const maxTokens = mode === 'recall' ? 4096 : 1500;
     const model = 'claude-sonnet-4-5-20250929';
     const response = await createMessageWithRetry({
       model,
-      max_tokens: 1500,
+      max_tokens: maxTokens,
       system: getPrompt('QUERY_SYSTEM_PROMPT'),
       messages: [{ role: 'user', content: fullPrompt }],
     }, 'admin_chat');

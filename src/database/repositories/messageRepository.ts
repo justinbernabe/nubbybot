@@ -175,6 +175,22 @@ export const messageRepository = {
     return rows.map(r => r.author_id);
   },
 
+  getGuildStats(guildId: string): { totalMessages: number; earliestDate: string | null; latestDate: string | null; uniqueAuthors: number } {
+    const row = getDb().prepare(`
+      SELECT COUNT(*) as total,
+             MIN(message_created_at) as earliest,
+             MAX(message_created_at) as latest,
+             COUNT(DISTINCT author_id) as authors
+      FROM messages WHERE guild_id = ? AND content != ''
+    `).get(guildId) as { total: number; earliest: string | null; latest: string | null; authors: number };
+    return {
+      totalMessages: row.total,
+      earliestDate: row.earliest,
+      latestDate: row.latest,
+      uniqueAuthors: row.authors,
+    };
+  },
+
   exists(id: string): boolean {
     const row = getDb().prepare('SELECT 1 FROM messages WHERE id = ?').get(id);
     return !!row;
