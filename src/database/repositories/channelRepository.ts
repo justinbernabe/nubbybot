@@ -42,7 +42,7 @@ export const channelRepository = {
     return getDb().prepare('SELECT * FROM channels WHERE guild_id = ?').all(guildId) as Array<Record<string, unknown>>;
   },
 
-  update(id: string, data: { last_backfill_message_id?: string; backfill_complete?: boolean }): void {
+  update(id: string, data: { last_backfill_message_id?: string | null; backfill_complete?: boolean }): void {
     const sets: string[] = ["updated_at = datetime('now')"];
     const params: Record<string, unknown> = { id };
 

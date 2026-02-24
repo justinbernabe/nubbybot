@@ -69,9 +69,9 @@ export const backfillService = {
     }
 
     // Force reprocess: reset progress so we re-fetch from the newest message
-    if (force && channelRecord?.backfill_complete) {
-      channelRepository.update(channel.id, { backfill_complete: false });
-      logger.info(`Channel #${channel.name} reset for force reprocess.`);
+    if (force) {
+      channelRepository.update(channel.id, { backfill_complete: false, last_backfill_message_id: null });
+      logger.info(`Channel #${channel.name} reset for force reprocess (starting from newest).`);
     }
 
     logger.info(`Backfilling channel: #${channel.name} (${channel.id})`);
@@ -80,7 +80,7 @@ export const backfillService = {
     const channelCreatedTs = snowflakeToTimestamp(channel.id);
     let newestTs = Date.now();
 
-    let beforeId: string | undefined = channelRecord?.last_backfill_message_id as string | undefined;
+    let beforeId: string | undefined = (channelRecord?.last_backfill_message_id as string) || undefined;
     let totalArchived = 0;
     let batchNumber = 0;
     let lastStatusLog = Date.now();
