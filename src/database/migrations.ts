@@ -182,6 +182,21 @@ export function runMigrations(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_api_calls_type_created ON api_calls(call_type, created_at);
+
+    CREATE TABLE IF NOT EXISTS feedback_suggestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      username TEXT,
+      original_bot_response TEXT NOT NULL,
+      user_feedback TEXT NOT NULL,
+      suggested_instruction TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feedback_suggestions_status ON feedback_suggestions(status);
   `);
 
   // FTS5 virtual table for full-text search on messages

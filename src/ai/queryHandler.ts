@@ -12,6 +12,8 @@ import { guildRepository } from '../database/repositories/guildRepository.js';
 import { usageTracker } from './usageTracker.js';
 import { followUpTracker } from './followUpTracker.js';
 import { trainingManager } from './trainingManager.js';
+import { feedbackDetector } from './feedbackDetector.js';
+import { archiveService } from '../services/archiveService.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
@@ -92,7 +94,10 @@ export const queryHandler = {
       if (isSummarizeRequest(question)) {
         const answer = await this.handleSummarize(question, message.guild.id, message.channel.id);
         loader.stop();
-        if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+        if (!loader.timedOut()) {
+          const sentMsg = await this.sendReply(message, answer, loader.getMessage());
+          if (sentMsg) archiveService.archiveMessage(sentMsg);
+        }
         this.logQuery(message, question, answer, startTime);
         return;
       }
@@ -127,7 +132,10 @@ export const queryHandler = {
         ? response.content[0].text
         : 'I could not generate a response.';
 
-      if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+      if (!loader.timedOut()) {
+        const sentMsg = await this.sendReply(message, answer, loader.getMessage());
+        if (sentMsg) archiveService.archiveMessage(sentMsg);
+      }
       followUpTracker.registerWindow(message.channel.id, message.author.id, question, answer);
       this.logQuery(message, question, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
     } catch (err) {
@@ -207,7 +215,10 @@ export const queryHandler = {
         ? response.content[0].text
         : 'I could not generate a response.';
 
-      if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+      if (!loader.timedOut()) {
+        const sentMsg = await this.sendReply(message, answer, loader.getMessage());
+        if (sentMsg) archiveService.archiveMessage(sentMsg);
+      }
       followUpTracker.recordFollowUpResponse(message.channel.id, message.author.id, answer);
       this.logQuery(message, `[follow-up] ${message.content}`, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
     } catch (err) {
@@ -291,11 +302,16 @@ export const queryHandler = {
       return;
     }
 
-    // Check for training commands (owner only)
+    // Check for training/feedback commands (owner only)
     if (message.author.id === config.bot.ownerUserId) {
       const trainingResult = trainingManager.handleCommand(question, 'dm');
       if (trainingResult) {
         await message.reply(trainingResult);
+        return;
+      }
+      const feedbackResult = feedbackDetector.handleCommand(question);
+      if (feedbackResult) {
+        await message.reply(feedbackResult);
         return;
       }
     }
@@ -308,7 +324,10 @@ export const queryHandler = {
       if (isSummarizeRequest(question)) {
         const answer = await this.handleSummarize(question, guildId, '');
         loader.stop();
-        if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+        if (!loader.timedOut()) {
+          const sentMsg = await this.sendReply(message, answer, loader.getMessage());
+          if (sentMsg) archiveService.archiveMessage(sentMsg);
+        }
         this.logDmQuery(message, guildId, question, answer, startTime);
         return;
       }
@@ -339,7 +358,10 @@ export const queryHandler = {
         ? response.content[0].text
         : 'I could not generate a response.';
 
-      if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+      if (!loader.timedOut()) {
+        const sentMsg = await this.sendReply(message, answer, loader.getMessage());
+        if (sentMsg) archiveService.archiveMessage(sentMsg);
+      }
       followUpTracker.registerWindow(message.channel.id, message.author.id, question, answer);
       this.logDmQuery(message, guildId, question, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
     } catch (err) {
@@ -390,7 +412,10 @@ export const queryHandler = {
         ? response.content[0].text
         : 'I could not generate a response.';
 
-      if (!loader.timedOut()) await this.sendReply(message, answer, loader.getMessage());
+      if (!loader.timedOut()) {
+        const sentMsg = await this.sendReply(message, answer, loader.getMessage());
+        if (sentMsg) archiveService.archiveMessage(sentMsg);
+      }
       followUpTracker.recordFollowUpResponse(message.channel.id, message.author.id, answer);
       this.logDmQuery(message, guildId, `[DM follow-up] ${message.content}`, answer, startTime, response.usage.input_tokens, response.usage.output_tokens);
     } catch (err) {
@@ -421,21 +446,21 @@ export const queryHandler = {
     }
   },
 
-  async sendReply(message: Message, text: string, loadingMsg?: Message | null): Promise<void> {
+  async sendReply(message: Message, text: string, loadingMsg?: Message | null): Promise<Message | null> {
     if (loadingMsg) {
       // Edit the loading message with the real answer
       try {
         if (text.length <= 2000) {
-          await loadingMsg.edit(text);
-          return;
+          const edited = await loadingMsg.edit(text);
+          return edited;
         }
         // For long answers: edit first chunk, send rest as new messages
         const chunks = splitMessage(text, 1990);
-        await loadingMsg.edit(chunks[0]);
+        const edited = await loadingMsg.edit(chunks[0]);
         for (let i = 1; i < chunks.length; i++) {
           if ('send' in message.channel) await message.channel.send(chunks[i]);
         }
-        return;
+        return edited;
       } catch {
         // If edit fails, fall through to send as new message
         logger.warn('Failed to edit loading message, sending as new reply');
@@ -443,13 +468,15 @@ export const queryHandler = {
     }
 
     if (text.length <= 2000) {
-      await message.reply(text);
+      return await message.reply(text);
     } else {
       const chunks = splitMessage(text, 1990);
+      let firstMsg: Message | null = null;
       for (let i = 0; i < chunks.length; i++) {
-        if (i === 0) await message.reply(chunks[i]);
+        if (i === 0) firstMsg = await message.reply(chunks[i]);
         else if ('send' in message.channel) await message.channel.send(chunks[i]);
       }
+      return firstMsg;
     }
   },
 

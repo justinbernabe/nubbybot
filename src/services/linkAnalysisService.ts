@@ -9,14 +9,16 @@ import { delay } from '../utils/rateLimiter.js';
 
 const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;
 
-const SKIP_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.mp4', '.webm', '.webp', '.svg',
-  '.ico', '.bmp', '.tiff', '.mov', '.avi', '.mkv',
+const IMAGE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
 ]);
 
-const SKIP_DOMAINS = new Set([
-  'cdn.discordapp.com',
-  'media.discordapp.net',
+const VIDEO_EXTENSIONS = new Set([
+  '.mp4', '.webm', '.mov', '.avi', '.mkv',
+]);
+
+const SKIP_EXTENSIONS = new Set([
+  '.svg', '.ico', '.tiff',
 ]);
 
 function extractUrls(text: string): string[] {
@@ -25,12 +27,26 @@ function extractUrls(text: string): string[] {
   return [...new Set(matches)];
 }
 
-function shouldSkipUrl(url: string): boolean {
+function getUrlExtension(url: string): string | null {
   try {
     const parsed = new URL(url);
-    if (SKIP_DOMAINS.has(parsed.hostname)) return true;
     const ext = parsed.pathname.split('.').pop()?.toLowerCase();
-    if (ext && SKIP_EXTENSIONS.has(`.${ext}`)) return true;
+    return ext ? `.${ext}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function isImageUrl(url: string): boolean {
+  const ext = getUrlExtension(url);
+  return ext !== null && IMAGE_EXTENSIONS.has(ext);
+}
+
+function shouldSkipUrl(url: string): boolean {
+  try {
+    const ext = getUrlExtension(url);
+    if (ext && SKIP_EXTENSIONS.has(ext)) return true;
+    if (ext && VIDEO_EXTENSIONS.has(ext)) return true;
     return false;
   } catch {
     return true;
@@ -104,6 +120,31 @@ async function analyzeWithClaude(url: string, title: string | null, text: string
   return response.content[0].type === 'text'
     ? response.content[0].text
     : 'Could not summarize.';
+}
+
+async function analyzeImageWithClaude(url: string): Promise<string> {
+  const model = 'claude-haiku-4-5-20251001';
+  const response = await createMessageWithRetry({
+    model,
+    max_tokens: 200,
+    system: getPrompt('IMAGE_ANALYSIS_SYSTEM_PROMPT'),
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'url', url } },
+        { type: 'text', text: 'Describe this image.' },
+      ],
+    }],
+  }, 'image_analysis', 2, 30_000);
+
+  usageTracker.track('image_analysis', model, {
+    input_tokens: response.usage.input_tokens,
+    output_tokens: response.usage.output_tokens,
+  });
+
+  return response.content[0].type === 'text'
+    ? response.content[0].text
+    : 'Could not describe image.';
 }
 
 let scrapeRunning = false;
@@ -212,15 +253,21 @@ export const linkAnalysisService = {
     if (!message.guild) return;
     if (message.author.bot) return;
 
-    const urls = extractUrls(message.content);
-    if (urls.length === 0) return;
+    // Collect URLs from message content + attachments
+    const contentUrls = extractUrls(message.content);
+    const attachmentUrls = message.attachments
+      .filter(a => a.contentType?.startsWith('image/') || isImageUrl(a.url))
+      .map(a => a.url);
+    const allUrls = [...new Set([...contentUrls, ...attachmentUrls])];
+
+    if (allUrls.length === 0) return;
 
     const guildId = message.guild.id;
     const channelId = message.channel.id;
     const authorId = message.author.id;
     const messageId = message.id;
 
-    for (const url of urls) {
+    for (const url of allUrls) {
       if (shouldSkipUrl(url)) continue;
 
       // Dedup: skip if already analyzed
@@ -247,27 +294,35 @@ export const linkAnalysisService = {
       });
 
       try {
-        const content = await fetchPageContent(url);
-        if (!content) {
-          linkRepository.markError(linkId, 'Failed to fetch or non-HTML content');
-          continue;
-        }
+        if (isImageUrl(url) || domain === 'cdn.discordapp.com' || domain === 'media.discordapp.net') {
+          // Image/GIF: use Claude vision API
+          const summary = await analyzeImageWithClaude(url);
+          linkRepository.markAnalyzed(linkId, '[Image]', summary);
+          logger.info(`Image analyzed: ${domain} — ${summary.substring(0, 60)}`);
+        } else {
+          // Regular link: fetch HTML and analyze
+          const content = await fetchPageContent(url);
+          if (!content) {
+            linkRepository.markError(linkId, 'Failed to fetch or non-HTML content');
+            continue;
+          }
 
-        if (content.text.length < 50) {
-          linkRepository.markError(linkId, 'Page content too short');
-          continue;
-        }
+          if (content.text.length < 50) {
+            linkRepository.markError(linkId, 'Page content too short');
+            continue;
+          }
 
-        const summary = await analyzeWithClaude(url, content.title, content.text);
-        linkRepository.markAnalyzed(linkId, content.title, summary);
-        logger.info(`Link analyzed: ${domain} — ${content.title ?? 'No title'}`);
+          const summary = await analyzeWithClaude(url, content.title, content.text);
+          linkRepository.markAnalyzed(linkId, content.title, summary);
+          logger.info(`Link analyzed: ${domain} — ${content.title ?? 'No title'}`);
+        }
       } catch (err) {
         logger.error(`Link analysis error for ${url}`, { error: err });
         linkRepository.markError(linkId, String(err));
       }
 
       // Rate limit between URLs
-      if (urls.indexOf(url) < urls.length - 1) {
+      if (allUrls.indexOf(url) < allUrls.length - 1) {
         await delay(1000);
       }
     }

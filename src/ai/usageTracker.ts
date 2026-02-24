@@ -6,11 +6,14 @@ export type CallType =
   | 'summarize'
   | 'profile'
   | 'link_analysis'
+  | 'image_analysis'
+  | 'keyword_classify'
   | 'followup_check'
   | 'followup_response'
   | 'admin_chat'
   | 'dm_query'
-  | 'dm_followup';
+  | 'dm_followup'
+  | 'feedback_classify';
 
 interface UsageData {
   input_tokens: number;

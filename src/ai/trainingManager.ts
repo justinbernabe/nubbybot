@@ -6,7 +6,7 @@ const SETTINGS_KEY = 'custom_instructions';
 interface TrainingInstruction {
   text: string;
   addedAt: string;
-  source: 'dm' | 'admin';
+  source: 'dm' | 'admin' | 'feedback';
 }
 
 function getInstructions(): TrainingInstruction[] {
@@ -24,7 +24,7 @@ function saveInstructions(instructions: TrainingInstruction[]): void {
 }
 
 export const trainingManager = {
-  addInstruction(text: string, source: 'dm' | 'admin'): TrainingInstruction[] {
+  addInstruction(text: string, source: 'dm' | 'admin' | 'feedback'): TrainingInstruction[] {
     const instructions = getInstructions();
     instructions.push({
       text: text.trim(),

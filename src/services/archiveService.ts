@@ -6,8 +6,6 @@ import { channelRepository } from '../database/repositories/channelRepository.js
 export const archiveService = {
   archiveMessage(message: Message): void {
     if (!message.guild) return;
-    // Skip other bots, but archive our own bot's messages
-    if (message.author.bot && message.author.id !== message.client.user?.id) return;
 
     // Ensure channel exists
     channelRepository.upsert({

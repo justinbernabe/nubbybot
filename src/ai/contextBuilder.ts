@@ -115,7 +115,7 @@ export const contextBuilder = {
     // 0. Fetch recent conversation from the current channel for context awareness
     if (channelId) {
       try {
-        const recentMessages = messageRepository.getRecentByChannel(channelId, 20);
+        const recentMessages = messageRepository.getRecentByChannel(channelId, 50);
         // Reverse so oldest first (query returns DESC)
         for (const msg of recentMessages.reverse()) {
           context.recentConversation.push({

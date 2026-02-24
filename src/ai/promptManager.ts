@@ -3,6 +3,7 @@ import {
   SUMMARIZE_SYSTEM_PROMPT,
   PROFILE_ANALYSIS_SYSTEM_PROMPT,
   LINK_ANALYSIS_SYSTEM_PROMPT,
+  IMAGE_ANALYSIS_SYSTEM_PROMPT,
 } from './promptTemplates.js';
 import { settingsRepository } from '../admin/settingsRepository.js';
 import { trainingManager } from './trainingManager.js';
@@ -12,6 +13,7 @@ const PROMPT_KEYS = {
   SUMMARIZE_SYSTEM_PROMPT: 'prompt:SUMMARIZE_SYSTEM_PROMPT',
   PROFILE_ANALYSIS_SYSTEM_PROMPT: 'prompt:PROFILE_ANALYSIS_SYSTEM_PROMPT',
   LINK_ANALYSIS_SYSTEM_PROMPT: 'prompt:LINK_ANALYSIS_SYSTEM_PROMPT',
+  IMAGE_ANALYSIS_SYSTEM_PROMPT: 'prompt:IMAGE_ANALYSIS_SYSTEM_PROMPT',
 } as const;
 
 const DEFAULTS: Record<string, string> = {
@@ -19,6 +21,7 @@ const DEFAULTS: Record<string, string> = {
   SUMMARIZE_SYSTEM_PROMPT,
   PROFILE_ANALYSIS_SYSTEM_PROMPT,
   LINK_ANALYSIS_SYSTEM_PROMPT,
+  IMAGE_ANALYSIS_SYSTEM_PROMPT,
 };
 
 type PromptName = keyof typeof PROMPT_KEYS;

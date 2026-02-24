@@ -1,4 +1,4 @@
-import type { Client, TextChannel, NewsChannel, Collection, Message } from 'discord.js';
+import type { Client, TextChannel, NewsChannel, ForumChannel, VoiceChannel, ThreadChannel, Collection, Message } from 'discord.js';
 import { ChannelType, SnowflakeUtil } from 'discord.js';
 import { channelRepository } from '../database/repositories/channelRepository.js';
 import { messageRepository } from '../database/repositories/messageRepository.js';
@@ -8,7 +8,7 @@ import { config } from '../config.js';
 import { delay, retryWithBackoff } from '../utils/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 
-type TextBasedGuildChannel = TextChannel | NewsChannel;
+type BackfillableChannel = TextChannel | NewsChannel | VoiceChannel | ThreadChannel;
 
 export interface BackfillStats {
   channelsProcessed: number;
@@ -36,20 +36,37 @@ export const backfillService = {
 
     for (const [channelId, channel] of channels) {
       if (!channel) continue;
-      if (
-        channel.type === ChannelType.GuildText ||
-        channel.type === ChannelType.GuildAnnouncement
-      ) {
+
+      const isTextLike = channel.type === ChannelType.GuildText ||
+        channel.type === ChannelType.GuildAnnouncement ||
+        channel.type === ChannelType.GuildVoice;
+      const isForum = channel.type === ChannelType.GuildForum;
+
+      if (isTextLike) {
         try {
-          const result = await this.backfillChannel(channel as TextBasedGuildChannel, force);
+          const result = await this.backfillChannel(channel as BackfillableChannel, force);
           if (result.skipped) {
             stats.channelsSkipped++;
           } else {
             stats.channelsProcessed++;
             stats.totalMessages += result.messagesArchived;
           }
+          // Also backfill threads within this channel (voice channels don't have threads)
+          if (channel.type !== ChannelType.GuildVoice) {
+            const threadMessages = await this.backfillThreads(channel as TextChannel | NewsChannel, force);
+            stats.totalMessages += threadMessages;
+          }
         } catch (err) {
           logger.error(`Failed to backfill channel #${channel.name} (${channelId})`, { error: err });
+        }
+      } else if (isForum) {
+        // Forum channels only have threads, no channel-level messages
+        try {
+          const threadMessages = await this.backfillThreads(channel as ForumChannel, force);
+          stats.totalMessages += threadMessages;
+          if (threadMessages > 0) stats.channelsProcessed++;
+        } catch (err) {
+          logger.error(`Failed to backfill forum #${channel.name} (${channelId})`, { error: err });
         }
       }
     }
@@ -61,7 +78,7 @@ export const backfillService = {
     return stats;
   },
 
-  async backfillChannel(channel: TextBasedGuildChannel, force = false): Promise<{ skipped: boolean; messagesArchived: number }> {
+  async backfillChannel(channel: BackfillableChannel, force = false): Promise<{ skipped: boolean; messagesArchived: number }> {
     const channelRecord = channelRepository.findById(channel.id);
     if (channelRecord?.backfill_complete && !force) {
       logger.info(`Channel #${channel.name} already backfilled, skipping.`);
@@ -149,6 +166,63 @@ export const backfillService = {
     return { skipped: false, messagesArchived: totalArchived };
   },
 
+  /** Backfill all threads (active + archived) within a channel or forum */
+  async backfillThreads(channel: TextChannel | NewsChannel | ForumChannel, force: boolean): Promise<number> {
+    let totalMessages = 0;
+
+    // Active threads
+    try {
+      const active = await channel.threads.fetchActive();
+      for (const [, thread] of active.threads) {
+        try {
+          const result = await this.backfillChannel(thread, force);
+          if (!result.skipped) totalMessages += result.messagesArchived;
+        } catch (err) {
+          logger.warn(`Failed to backfill active thread "${thread.name}"`, { error: err });
+        }
+        await delay(config.bot.backfillBatchDelayMs);
+      }
+    } catch (err) {
+      logger.warn(`Failed to fetch active threads for #${channel.name}`, { error: err });
+    }
+
+    // Archived threads (paginated)
+    try {
+      let hasMore = true;
+      let beforeTimestamp: number | undefined;
+      while (hasMore) {
+        const archived = await channel.threads.fetchArchived({ before: beforeTimestamp ? new Date(beforeTimestamp) : undefined, limit: 100 });
+        for (const [, thread] of archived.threads) {
+          try {
+            const result = await this.backfillChannel(thread, force);
+            if (!result.skipped) totalMessages += result.messagesArchived;
+          } catch (err) {
+            logger.warn(`Failed to backfill archived thread "${thread.name}"`, { error: err });
+          }
+          await delay(config.bot.backfillBatchDelayMs);
+        }
+        hasMore = archived.hasMore ?? false;
+        if (archived.threads.size > 0) {
+          const oldest = archived.threads.last();
+          if (oldest?.archiveTimestamp) {
+            beforeTimestamp = oldest.archiveTimestamp;
+          } else {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+    } catch (err) {
+      logger.warn(`Failed to fetch archived threads for #${channel.name}`, { error: err });
+    }
+
+    if (totalMessages > 0) {
+      logger.info(`[Backfill] Threads in #${channel.name}: ${totalMessages} messages archived`);
+    }
+    return totalMessages;
+  },
+
   /** Catch up on messages missed while the bot was offline */
   async catchUp(client: Client<true>, guildId: string): Promise<void> {
     const guild = client.guilds.cache.get(guildId);
@@ -161,7 +235,8 @@ export const backfillService = {
       if (!channel) continue;
       if (
         channel.type !== ChannelType.GuildText &&
-        channel.type !== ChannelType.GuildAnnouncement
+        channel.type !== ChannelType.GuildAnnouncement &&
+        channel.type !== ChannelType.GuildVoice
       ) continue;
 
       const channelRecord = channelRepository.findById(channel.id);
@@ -172,7 +247,7 @@ export const backfillService = {
       if (!latestId) continue;
 
       try {
-        const textChannel = channel as TextBasedGuildChannel;
+        const textChannel = channel as BackfillableChannel;
         let afterId: string = latestId;
         let channelCatchUp = 0;
 
