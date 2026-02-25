@@ -49,15 +49,8 @@ export async function onReady(client: Client<true>): Promise<void> {
     });
   }
 
-  // Auto-build profiles after catch-up has time to archive recent messages
+  // Schedule periodic profile refresh (no auto-build on startup — use /profile or admin panel)
   for (const [guildId] of client.guilds.cache) {
-    setTimeout(() => {
-      autoProfileService.buildMissingAndStaleProfiles(guildId).then(() => {
-        autoProfileService.startPeriodicRefresh(guildId);
-      }).catch((err) => {
-        logger.error(`Auto-profile build failed for guild ${guildId}`, { error: err });
-        autoProfileService.startPeriodicRefresh(guildId);
-      });
-    }, 30_000);
+    autoProfileService.startPeriodicRefresh(guildId);
   }
 }
