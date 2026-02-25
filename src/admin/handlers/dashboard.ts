@@ -4,7 +4,7 @@ import { sendJson } from '../middleware.js';
 import { usageTracker } from '../../ai/usageTracker.js';
 import { followUpTracker } from '../../ai/followUpTracker.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 
 const COST_LEVELS: Record<string, 'HIGH' | 'LOW'> = {
   query: 'HIGH',
