@@ -21,6 +21,21 @@ const SKIP_EXTENSIONS = new Set([
   '.svg', '.ico', '.tiff',
 ]);
 
+function isSafeUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') return false;
+    if (hostname.startsWith('10.')) return false;
+    if (hostname.startsWith('192.168.')) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
+    if (hostname.startsWith('169.254.')) return false;
+    if (hostname === 'metadata.google.internal') return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function extractUrls(text: string): string[] {
   const matches = text.match(URL_REGEX);
   if (!matches) return [];
@@ -44,6 +59,7 @@ function isImageUrl(url: string): boolean {
 
 function shouldSkipUrl(url: string): boolean {
   try {
+    if (!isSafeUrl(url)) return true;
     const ext = getUrlExtension(url);
     if (ext && SKIP_EXTENSIONS.has(ext)) return true;
     if (ext && VIDEO_EXTENSIONS.has(ext)) return true;
@@ -173,6 +189,7 @@ export const linkAnalysisService = {
         WHERE m.guild_id = ? AND m.content LIKE '%http%' AND u.bot = 0
           AND m.message_created_at >= ?
         ORDER BY m.message_created_at DESC
+        LIMIT 5000
       `).all(guildId, oneYearAgo.toISOString()) as Array<{
         id: string; guild_id: string; channel_id: string; author_id: string; content: string;
       }>;

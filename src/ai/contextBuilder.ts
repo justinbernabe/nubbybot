@@ -23,25 +23,30 @@ export function detectQueryMode(question: string): QueryMode {
   return RECALL_PATTERNS.some(p => p.test(question)) ? 'recall' : 'default';
 }
 
+// Cache users+nicknames per guild — refreshed once per context build
+let userCacheGuildId: string | null = null;
+let userCacheData: ReturnType<typeof userRepository.findAllWithNicknames> = [];
+
+function getUsersWithNicknames(guildId: string) {
+  if (userCacheGuildId !== guildId) {
+    userCacheData = userRepository.findAllWithNicknames(guildId);
+    userCacheGuildId = guildId;
+  }
+  return userCacheData;
+}
+
 function resolveUserIdFromQuestion(question: string, guildId: string): string | null {
-  const allUsers = userRepository.findAllNonBot();
+  const allUsers = getUsersWithNicknames(guildId);
   const questionLower = question.toLowerCase();
 
   for (const user of allUsers) {
-    const username = (user.username as string).toLowerCase();
-    const displayName = (user.global_display_name as string | null)?.toLowerCase();
+    const username = user.username.toLowerCase();
+    const displayName = user.global_display_name?.toLowerCase();
+    const matched = questionLower.includes(username)
+      || (displayName && questionLower.includes(displayName))
+      || user.nicknames.some(n => questionLower.includes(n.toLowerCase()));
 
-    let matched = questionLower.includes(username) || (displayName && questionLower.includes(displayName));
-    if (!matched) {
-      const nicknames = userRepository.getNicknames(user.id as string, guildId);
-      matched = nicknames.some((n) => {
-        const nick = (n.nickname as string | null)?.toLowerCase();
-        const display = (n.display_name as string | null)?.toLowerCase();
-        return (nick && questionLower.includes(nick)) || (display && questionLower.includes(display));
-      });
-    }
-
-    if (matched) return user.id as string;
+    if (matched) return user.id;
   }
   return null;
 }
@@ -129,6 +134,16 @@ export const contextBuilder = {
       }
     }
 
+    // Shared cache for channel name lookups (avoids N+1 across all sections)
+    const channelNameCache = new Map<string, string>();
+    const resolveChannelName = (chId: string): string => {
+      if (!channelNameCache.has(chId)) {
+        const ch = channelRepository.findById(chId);
+        channelNameCache.set(chId, (ch?.name as string) ?? chId);
+      }
+      return channelNameCache.get(chId)!;
+    };
+
     // 1. Get profiles and recent messages for mentioned users
     for (const userId of mentionedUserIds) {
       const profile = profileRepository.findByUserAndGuild(userId, guildId);
@@ -148,12 +163,11 @@ export const contextBuilder = {
 
       const userMessages = messageRepository.getRecentByUser(userId, guildId, 50);
       for (const msg of userMessages) {
-        const channelRecord = channelRepository.findById(msg.channel_id);
         context.relevantMessages.push({
           author: ((user?.global_display_name ?? user?.username) as string) ?? userId,
           content: msg.content,
           date: new Date(msg.message_created_at).toLocaleDateString(),
-          channel: (channelRecord?.name as string) ?? msg.channel_id,
+          channel: resolveChannelName(msg.channel_id),
         });
       }
     }
@@ -177,7 +191,6 @@ export const contextBuilder = {
 
         const searchResults = messageRepository.searchMessages(guildId, sanitized, ftsLimit, targetAuthorId);
         const authorCache = new Map<string, string>();
-        const channelCache = new Map<string, string>();
 
         if (mode === 'recall' && searchResults.length > 0) {
           // Pre-process locally: count, group by month, take samples
@@ -189,11 +202,11 @@ export const contextBuilder = {
             return authorCache.get(authorId)!;
           };
           const resolveChannel = (chId: string): string => {
-            if (!channelCache.has(chId)) {
+            if (!channelNameCache.has(chId)) {
               const ch = channelRepository.findById(chId);
-              channelCache.set(chId, (ch?.name as string) ?? chId);
+              channelNameCache.set(chId, (ch?.name as string) ?? chId);
             }
-            return channelCache.get(chId)!;
+            return channelNameCache.get(chId)!;
           };
 
           // Group by month
@@ -247,16 +260,12 @@ export const contextBuilder = {
               const user = userRepository.findById(msg.author_id);
               authorCache.set(msg.author_id, ((user?.global_display_name ?? user?.username) as string) ?? msg.author_id);
             }
-            if (!channelCache.has(msg.channel_id)) {
-              const ch = channelRepository.findById(msg.channel_id);
-              channelCache.set(msg.channel_id, (ch?.name as string) ?? msg.channel_id);
-            }
 
             context.relevantMessages.push({
               author: authorCache.get(msg.author_id)!,
               content: msg.content,
               date: new Date(msg.message_created_at).toLocaleDateString(),
-              channel: channelCache.get(msg.channel_id)!,
+              channel: resolveChannelName(msg.channel_id),
             });
           }
         }
@@ -267,29 +276,21 @@ export const contextBuilder = {
 
     // 3. If no mentioned users, try to find users by name in the question
     if (mentionedUserIds.length === 0) {
-      const allUsers = userRepository.findAllNonBot();
+      const allUsers = getUsersWithNicknames(guildId);
       const questionLower = question.toLowerCase();
 
       for (const user of allUsers) {
-        const username = (user.username as string).toLowerCase();
-        const displayName = (user.global_display_name as string | null)?.toLowerCase();
-
-        // Check username, display name, and nicknames
-        let matched = questionLower.includes(username) || (displayName && questionLower.includes(displayName));
-        if (!matched) {
-          const nicknames = userRepository.getNicknames(user.id as string, guildId);
-          matched = nicknames.some((n) => {
-            const nick = (n.nickname as string | null)?.toLowerCase();
-            const display = (n.display_name as string | null)?.toLowerCase();
-            return (nick && questionLower.includes(nick)) || (display && questionLower.includes(display));
-          });
-        }
+        const username = user.username.toLowerCase();
+        const displayName = user.global_display_name?.toLowerCase();
+        const matched = questionLower.includes(username)
+          || (displayName && questionLower.includes(displayName))
+          || user.nicknames.some(n => questionLower.includes(n.toLowerCase()));
 
         if (matched) {
-          const profile = profileRepository.findByUserAndGuild(user.id as string, guildId);
+          const profile = profileRepository.findByUserAndGuild(user.id, guildId);
           if (profile) {
             context.userProfiles.push({
-              username: (user.global_display_name ?? user.username) as string,
+              username: (user.global_display_name ?? user.username),
               summary: profile.summary ?? 'No summary available',
               traits: profile.personality_traits ?? [],
               games: profile.favorite_games ?? [],

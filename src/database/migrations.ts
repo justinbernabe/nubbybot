@@ -86,6 +86,7 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(message_created_at);
     CREATE INDEX IF NOT EXISTS idx_messages_channel_created ON messages(channel_id, message_created_at);
     CREATE INDEX IF NOT EXISTS idx_messages_author_created ON messages(author_id, message_created_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_guild_author ON messages(guild_id, author_id);
 
     CREATE TABLE IF NOT EXISTS attachments (
       id TEXT PRIMARY KEY,

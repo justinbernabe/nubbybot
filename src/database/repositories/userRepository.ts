@@ -64,4 +64,32 @@ export const userRepository = {
       ORDER BY changed_at DESC
     `).all(userId, guildId) as Array<Record<string, unknown>>;
   },
+
+  /** Load all non-bot users with their nicknames for a guild in 2 queries (not N+1). */
+  findAllWithNicknames(guildId: string): Array<{
+    id: string;
+    username: string;
+    global_display_name: string | null;
+    nicknames: string[];
+  }> {
+    const users = getDb().prepare(
+      'SELECT id, username, global_display_name FROM users WHERE bot = 0',
+    ).all() as Array<{ id: string; username: string; global_display_name: string | null }>;
+
+    const allNicknames = getDb().prepare(
+      'SELECT user_id, nickname, display_name FROM user_nicknames WHERE guild_id = ?',
+    ).all(guildId) as Array<{ user_id: string; nickname: string | null; display_name: string | null }>;
+
+    const nicknameMap = new Map<string, string[]>();
+    for (const n of allNicknames) {
+      if (!nicknameMap.has(n.user_id)) nicknameMap.set(n.user_id, []);
+      if (n.nickname) nicknameMap.get(n.user_id)!.push(n.nickname);
+      if (n.display_name) nicknameMap.get(n.user_id)!.push(n.display_name);
+    }
+
+    return users.map(u => ({
+      ...u,
+      nicknames: nicknameMap.get(u.id) ?? [],
+    }));
+  },
 };
