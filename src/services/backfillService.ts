@@ -223,6 +223,99 @@ export const backfillService = {
     return totalMessages;
   },
 
+  /** Catch up on missed messages in a single channel/thread */
+  async catchUpChannel(channel: BackfillableChannel): Promise<number> {
+    const latestId = messageRepository.getLatestMessageId(channel.id);
+    if (!latestId) return 0;
+
+    let afterId: string = latestId;
+    let count = 0;
+
+    while (true) {
+      const messages = await retryWithBackoff(
+        () => channel.messages.fetch({ limit: 100, after: afterId }),
+        `Catch-up #${channel.name}`,
+      );
+
+      if (messages.size === 0) break;
+
+      for (const [, message] of messages) {
+        try {
+          archiveService.archiveMessage(message);
+        } catch {
+          // skip individual failures
+        }
+      }
+
+      count += messages.size;
+      // messages.fetch with `after` returns newest first, so first() is the newest
+      const newest = messages.first();
+      if (newest) afterId = newest.id;
+
+      await delay(config.bot.backfillBatchDelayMs);
+    }
+
+    return count;
+  },
+
+  /** Catch up on threads (active + archived) within a channel */
+  async catchUpThreads(channel: TextChannel | NewsChannel | ForumChannel): Promise<number> {
+    let total = 0;
+
+    // Active threads
+    try {
+      const active = await channel.threads.fetchActive();
+      for (const [, thread] of active.threads) {
+        try {
+          const count = await this.catchUpChannel(thread);
+          total += count;
+          if (count > 0) {
+            logger.info(`[Catch-up] Thread "${thread.name}": ${count} missed messages`);
+          }
+        } catch (err) {
+          logger.warn(`[Catch-up] Failed for active thread "${thread.name}"`, { error: err });
+        }
+      }
+    } catch (err) {
+      logger.warn(`[Catch-up] Failed to fetch active threads for #${channel.name}`, { error: err });
+    }
+
+    // Archived threads (paginated)
+    try {
+      let hasMore = true;
+      let beforeTimestamp: number | undefined;
+      while (hasMore) {
+        const archived = await channel.threads.fetchArchived({ before: beforeTimestamp ? new Date(beforeTimestamp) : undefined, limit: 100 });
+        for (const [, thread] of archived.threads) {
+          try {
+            const count = await this.catchUpChannel(thread);
+            total += count;
+            if (count > 0) {
+              logger.info(`[Catch-up] Archived thread "${thread.name}": ${count} missed messages`);
+            }
+          } catch (err) {
+            logger.warn(`[Catch-up] Failed for archived thread "${thread.name}"`, { error: err });
+          }
+        }
+        hasMore = archived.hasMore ?? false;
+        if (archived.threads.size > 0) {
+          const oldest = archived.threads.last();
+          if (oldest?.archiveTimestamp) {
+            beforeTimestamp = oldest.archiveTimestamp;
+          } else {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+    } catch (err) {
+      logger.warn(`[Catch-up] Failed to fetch archived threads for #${channel.name}`, { error: err });
+    }
+
+    return total;
+  },
+
   /** Catch up on messages missed while the bot was offline */
   async catchUp(client: Client<true>, guildId: string): Promise<void> {
     const guild = client.guilds.cache.get(guildId);
@@ -233,54 +326,74 @@ export const backfillService = {
 
     for (const [, channel] of channels) {
       if (!channel) continue;
-      if (
-        channel.type !== ChannelType.GuildText &&
-        channel.type !== ChannelType.GuildAnnouncement &&
-        channel.type !== ChannelType.GuildVoice
-      ) continue;
+
+      const isTextLike = channel.type === ChannelType.GuildText ||
+        channel.type === ChannelType.GuildAnnouncement ||
+        channel.type === ChannelType.GuildVoice;
+      const isForum = channel.type === ChannelType.GuildForum;
+
+      if (!isTextLike && !isForum) continue;
 
       const channelRecord = channelRepository.findById(channel.id);
-      if (!channelRecord?.backfill_complete) continue;
 
-      // Find the latest message we have for this channel
-      const latestId = messageRepository.getLatestMessageId(channel.id);
-      if (!latestId) continue;
-
-      try {
-        const textChannel = channel as BackfillableChannel;
-        let afterId: string = latestId;
-        let channelCatchUp = 0;
-
-        while (true) {
-          const messages = await retryWithBackoff(
-            () => textChannel.messages.fetch({ limit: 100, after: afterId }),
-            `Catch-up #${channel.name}`,
-          );
-
-          if (messages.size === 0) break;
-
-          for (const [, message] of messages) {
-            try {
-              archiveService.archiveMessage(message);
-            } catch {
-              // skip individual failures
+      // New channel we've never seen — queue a full backfill
+      if (!channelRecord) {
+        if (isTextLike) {
+          logger.info(`[Catch-up] New channel #${channel.name} — running initial backfill`);
+          try {
+            const result = await this.backfillChannel(channel as BackfillableChannel, false);
+            totalCaughtUp += result.messagesArchived;
+            if (channel.type !== ChannelType.GuildVoice) {
+              totalCaughtUp += await this.backfillThreads(channel as TextChannel | NewsChannel, false);
             }
+          } catch (err) {
+            logger.warn(`[Catch-up] Initial backfill failed for #${channel.name}`, { error: err });
           }
-
-          channelCatchUp += messages.size;
-          // messages.fetch with `after` returns newest first, so last() is the newest
-          const newest = messages.first();
-          if (newest) afterId = newest.id;
-
-          await delay(config.bot.backfillBatchDelayMs);
+        } else if (isForum) {
+          logger.info(`[Catch-up] New forum #${channel.name} — running initial backfill`);
+          try {
+            totalCaughtUp += await this.backfillThreads(channel as ForumChannel, false);
+          } catch (err) {
+            logger.warn(`[Catch-up] Initial backfill failed for forum #${channel.name}`, { error: err });
+          }
         }
+        continue;
+      }
 
-        if (channelCatchUp > 0) {
-          totalCaughtUp += channelCatchUp;
-          logger.info(`[Catch-up] #${channel.name}: ${channelCatchUp} missed messages archived`);
+      // Incomplete backfill — resume it instead of skipping
+      if (!channelRecord.backfill_complete && isTextLike) {
+        logger.info(`[Catch-up] Resuming incomplete backfill for #${channel.name}`);
+        try {
+          const result = await this.backfillChannel(channel as BackfillableChannel, false);
+          totalCaughtUp += result.messagesArchived;
+        } catch (err) {
+          logger.warn(`[Catch-up] Resume backfill failed for #${channel.name}`, { error: err });
         }
-      } catch (err) {
-        logger.warn(`[Catch-up] Failed for #${channel.name}`, { error: err });
+      }
+
+      // Catch up on new messages in the channel itself
+      if (isTextLike) {
+        try {
+          const count = await this.catchUpChannel(channel as BackfillableChannel);
+          if (count > 0) {
+            totalCaughtUp += count;
+            logger.info(`[Catch-up] #${channel.name}: ${count} missed messages archived`);
+          }
+        } catch (err) {
+          logger.warn(`[Catch-up] Failed for #${channel.name}`, { error: err });
+        }
+      }
+
+      // Catch up on threads (text, announcement, and forum channels)
+      if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement || isForum) {
+        try {
+          const threadCount = await this.catchUpThreads(channel as TextChannel | NewsChannel | ForumChannel);
+          if (threadCount > 0) {
+            totalCaughtUp += threadCount;
+          }
+        } catch (err) {
+          logger.warn(`[Catch-up] Thread catch-up failed for #${channel.name}`, { error: err });
+        }
       }
     }
 
